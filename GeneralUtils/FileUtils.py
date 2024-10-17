@@ -1,13 +1,14 @@
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
+
 from GeneralUtils.DirPaths import LIBRISPEECH_TRAIN_ROOT_FOLDER
 from GeneralUtils.Exceptions import FileNotSupportedException
 
-AUDIO_FILE_SUPPORTED_FORMATS = tuple([".flac", ".wav"])
-TEXT_FILE_SUPPORTED_FORMATS = None
+AUDIO_FILE_SUPPORTED_FORMATS : Tuple[str, ...] = ('.flac', '.wav', '.mp3')
+TEXT_FILE_SUPPORTED_FORMATS = None #TODO: Add supported text formats
 
 
-def retrieve_full_audio_file_path(filename: str, root_folder: Path = LIBRISPEECH_TRAIN_ROOT_FOLDER) -> Optional[Path]:
+def retrieve_full_audio_file_path(filename: str, root_folder: Path = LIBRISPEECH_TRAIN_ROOT_FOLDER) -> Path:
     """
     Given a filename, inside a root directory, returns the full path of the file if found.
     @rtype: Optional[Path]
@@ -27,9 +28,53 @@ def retrieve_full_audio_file_path(filename: str, root_folder: Path = LIBRISPEECH
     raise FileNotFoundError(f"File '{filename}' not found in '{root_folder}'")
 
 
-def retrieve_transcript_of_audio_file(filename: str, root_folder: Path = LIBRISPEECH_TRAIN_ROOT_FOLDER):
-    raise NotImplementedError(f"{retrieve_transcript_of_audio_file.__name__} not implemented yet")
+def retrieve_transcript_of_audio_file(filename: str | Path, root_folder: Path = LIBRISPEECH_TRAIN_ROOT_FOLDER) -> str:
+
+    # Handle different instances as input
+    if isinstance(filename, str):
+        try:
+            full_file_path = retrieve_full_audio_file_path(filename, root_folder)
+        except FileNotSupportedException as e:
+            raise e
+    elif isinstance(filename, Path):
+        full_file_path = filename
+    else:
+        raise AttributeError(f"Parameter 'filename' needs to be of type str or Path. Got {type(filename)} instead!")
+
+    filename_without_extension = full_file_path.stem
+    parent_directory = full_file_path.parent
+
+    #Obtain text file path
+    text_files = list(parent_directory.glob("*.trans.txt"))
+    if not text_files:
+        raise FileNotFoundError(f"No .txt file found in {parent_directory}")
+
+    text_file_path = text_files[0]
+    transcript = ""
+
+    with open(text_file_path, 'r') as transcript_file:
+        for line in transcript_file:
+            if line.startswith(filename_without_extension):
+                line = line.strip()
+                transcript = line.removeprefix(filename_without_extension).strip()
+                break
+
+    return transcript
 
 
-def retrieve_dataset_file_paths(root_folder: Path = LIBRISPEECH_TRAIN_ROOT_FOLDER) -> list[Path]:
-    pass
+def retrieve_dataset_file_paths(root_folder: Path = LIBRISPEECH_TRAIN_ROOT_FOLDER,
+                                supported_formats: Tuple[str, ...] = AUDIO_FILE_SUPPORTED_FORMATS) -> list[Path]:
+    """
+    Retrieve supported file paths in a list.
+    @param root_folder: The root from which to search for files downstream.
+    @param supported_formats: Supported audio file formats. Defaults to module definition.
+    @return: List of all supported files full paths.
+    """
+    supported_files = []
+
+    # Search recursively for files with extensions matching the supported formats
+    for file_path in root_folder.rglob("*"):
+        if file_path.suffix.lower() in supported_formats:
+            supported_files.append(file_path)
+
+    return supported_files
