@@ -1,6 +1,9 @@
 denoiser_model/LibriSpeech
 denoiser_model/LibriSpeechNoisy/
 
+# Ignore json files
+*.json
+
 # Ignore all audio files
 *.wav
 *.flac

@@ -29,7 +29,13 @@ def retrieve_full_audio_file_path(filename: str, root_folder: Path = LIBRISPEECH
 
 
 def retrieve_transcript_of_audio_file(filename: str | Path, root_folder: Path = LIBRISPEECH_TRAIN_ROOT_FOLDER) -> str:
-
+    """
+    Retrieves relevant transcript from given file in the data. For now, supports only LibriSpeech,
+    where the transcript file is a single .txt file with transcript line per file in the same directory.
+    @param filename: Name of the file we want to fetch the transcript for.
+    @param root_folder: The root data folder in which the data is located.
+    @return: String of the transcript.
+    """
     # Handle different instances as input
     if isinstance(filename, str):
         try:
