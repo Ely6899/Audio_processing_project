@@ -7,7 +7,7 @@ from GeneralUtils.Exceptions import FileNotSupportedException
 from GeneralUtils.FileUtils import retrieve_full_audio_file_path
 
 
-def read_audio_file_as_waveform(file_name: str | Path,
+def read_audio_file_as_waveform(file_name: Path,
                                 data_root_path: Path = LIBRISPEECH_TRAIN_ROOT_FOLDER,
                                 sr: float | None = None) -> tuple[np.ndarray, int | float]:
     """
@@ -19,18 +19,7 @@ def read_audio_file_as_waveform(file_name: str | Path,
     @return: File data as a numpy array and sample rate value of the file.
     """
 
-    if isinstance(file_name, Path):
-        full_file_path = file_name
-    elif isinstance(file_name, str):
-        try:
-            full_file_path = retrieve_full_audio_file_path(file_name, root_folder=data_root_path)
-        except FileNotSupportedException as file_not_supported_instance:
-            raise file_not_supported_instance
-        except FileNotFoundError as file_not_found_instance:
-            raise file_not_found_instance
-    else:
-        raise AttributeError(f"Parameter 'filename' needs to be of type str or Path. Got {type(file_name)} instead!")
-
+    full_file_path = retrieve_full_audio_file_path(file_name, data_root_path)
     file_data, sample_rate = librosa.load(full_file_path, sr=sr)
     return file_data, sample_rate
 
