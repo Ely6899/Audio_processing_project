@@ -1,11 +1,8 @@
-from GeneralUtils import DirPaths, Exceptions, FileUtils
-from GeneralUtils.Exceptions import FileNotSupportedException
-from Preprocessing import AudioPreprocess
+from pathlib import Path
+
+from GeneralUtils.DirPaths import LIBRISPEECH_TRAIN_ROOT_FOLDER
+from GeneralUtils.FileUtils import get_intermediate_folders
 
 if __name__ == '__main__':
-    try:
-        file_data, sr = AudioPreprocess.read_audio_file_as_waveform("hello.flac")
-    except FileNotSupportedException as e:
-        print(e)
-    except FileNotFoundError as e:
-        print(e)
+    print(get_intermediate_folders(Path("LibriSpeech/19/198/19-198-0000.flac"), LIBRISPEECH_TRAIN_ROOT_FOLDER))
+
