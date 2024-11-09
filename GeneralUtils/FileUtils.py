@@ -1,6 +1,5 @@
 from pathlib import Path
-from typing import Optional, Tuple
-
+from typing import Tuple, Any
 from tqdm import tqdm
 
 from GeneralUtils.DirPaths import LIBRISPEECH_TRAIN_ROOT_FOLDER
@@ -23,16 +22,26 @@ def retrieve_full_audio_file_path(file_name: Path, root_folder: Path = LIBRISPEE
     """
 
     try:
+        if not file_name.exists():
+            raise FileNotFoundError(f"File '{file_name}' not found in '{root_folder}'")
+
         file_format: str = file_name.suffix
         if file_format not in AUDIO_FILE_SUPPORTED_FORMATS:
             raise FileNotSupportedException(file_format)
+
+        # Resolve both paths to their absolute form
+        file_name_full = file_name.resolve()
+        root_folder_full = root_folder.resolve()
+
+        # Check if file_name is within root_folder
+        if file_name_full.is_relative_to(root_folder_full):
+            return file_name
 
         # Use rglob to recursively search for the file
         for file_path in root_folder.rglob(file_name.name):
             if file_path.is_file():
                 return file_path
 
-        raise FileNotFoundError(f"File '{file_name}' not found in '{root_folder}'")
     except AttributeError as attribute_error:
         raise attribute_error
 
@@ -44,6 +53,7 @@ def retrieve_transcript_of_audio_file(file_name: Path, root_folder: Path = LIBRI
     @param file_name: Name of the file we want to fetch the transcript for.
     @param root_folder: The root data folder in which the data is located.
     @return: String of the transcript. Returns None if no transcript found.
+    @raise: FileNotFoundError: Given file wasn't found.
     """
 
     full_file_path: Path = retrieve_full_audio_file_path(file_name=file_name, root_folder=root_folder)
@@ -52,13 +62,12 @@ def retrieve_transcript_of_audio_file(file_name: Path, root_folder: Path = LIBRI
     parent_directory: Path = full_file_path.parent
 
     #Obtain text file path
-    text_files = list(parent_directory.glob("*.trans.txt"))
+    text_files: list[Any] = list(parent_directory.glob("*.trans.txt"))
     if not text_files:
         raise FileNotFoundError(f"No .txt file found in {parent_directory}")
 
-    text_file_path = text_files[
-        0]  #For Librispeech use case, should be only 1 file. TODO: Extend use-cases to other datasets if necessary
-    transcript = None
+    text_file_path = text_files[0]  #For Librispeech use case, should be only 1 file.
+    transcript: str | None = None
 
     with open(text_file_path, 'r') as transcript_file:
         for line in transcript_file:
@@ -71,16 +80,24 @@ def retrieve_transcript_of_audio_file(file_name: Path, root_folder: Path = LIBRI
 
 
 def get_intermediate_folders(file_name: Path, root_folder: Path) -> Path:
+    """
+    Gets the folders between the root and the file itself.
+    @param file_name: Name of the file.
+    @param root_folder: Root folder we start the search from.
+    @return: Folders between root_folder and file_name.
+    @raise: FileNotFoundError: Given file wasn't found.
+    """
 
+    full_file_path: Path = retrieve_full_audio_file_path(file_name=file_name, root_folder=root_folder)
     try:
         # Ensure both paths are absolute
-        file_name : Path = Path(file_name).resolve()
+        file_name : Path = Path(full_file_path).resolve()
         root_folder: Path= Path(root_folder).resolve()
 
         # Check if file is within base_directory
         if root_folder in file_name.parents:
             # Get the relative path from base_directory to file_path
-            relative_path = file_name.relative_to(root_folder)
+            relative_path: Path = file_name.relative_to(root_folder)
             sub_folders_tuple: tuple[str, ...] = relative_path.parts[:-1] # Exclude the last part which is the file name
             return Path(*sub_folders_tuple)
         else:
