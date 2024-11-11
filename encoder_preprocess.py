@@ -1,4 +1,4 @@
-from Models.Encoder.preprocess import preprocess_librispeech
+from Models.Encoder.preprocess import preprocess_librispeech, preprocess_voxceleb1, preprocess_voxceleb2
 from utils.argutils import print_args
 from pathlib import Path
 import argparse
@@ -15,12 +15,7 @@ if __name__ == "__main__":
                     "after having downloaded them and put them in a same directory, e.g.:\n"
                     "-[datasets_root]\n"
                     "  -LibriSpeech\n"
-                    "    -train-other-500\n"
-                    "  -VoxCeleb1\n"
-                    "    -wav\n"
-                    "    -vox1_meta.csv\n"
-                    "  -VoxCeleb2\n"
-                    "    -dev",
+                    "    -train-other-500\n",
         formatter_class=MyFormatter
     )
     parser.add_argument("datasets_root", type=Path, help=\

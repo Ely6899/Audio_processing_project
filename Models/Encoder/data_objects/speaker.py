@@ -11,6 +11,7 @@ class Speaker:
         self.utterance_cycler = None
         
     def _load_utterances(self):
+        print(self.root)
         with self.root.joinpath("_sources.txt").open("r") as sources_file:
             sources = [l.split(",") for l in sources_file]
         sources = {frames_fname: wave_fpath for frames_fname, wave_fpath in sources}

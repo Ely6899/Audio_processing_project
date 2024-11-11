@@ -21,7 +21,7 @@ colormap = np.array([
     [33, 0, 127],
     [0, 0, 0],
     [183, 183, 183],
-], dtype=np.float) / 255 
+], dtype=np.cfloat) / 255
 
 
 class Visualizations:
@@ -65,8 +65,8 @@ class Visualizations:
     def log_params(self):
         if self.disabled:
             return 
-        from encoder import params_data
-        from encoder import params_model
+        from Models.Encoder import params_data
+        from Models.Encoder import params_model
         param_string = "<b>Model parameters</b>:<br>"
         for param_name in (p for p in dir(params_model) if not p.startswith("__")):
             value = getattr(params_model, param_name)
