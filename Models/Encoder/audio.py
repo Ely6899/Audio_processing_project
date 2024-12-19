@@ -15,7 +15,7 @@ except:
     webrtcvad=None
 
 int16_max = (2 ** 15) - 1
-
+SAMPLING_RATE = sampling_rate
 
 def preprocess_wav(fpath_or_wav: Union[str, Path, np.ndarray],
                    source_sr: Optional[int] = None):
@@ -35,10 +35,10 @@ def preprocess_wav(fpath_or_wav: Union[str, Path, np.ndarray],
         wav, source_sr = librosa.load(str(fpath_or_wav), sr=None)
     else:
         wav = fpath_or_wav
-    
+
     # Resample the wav if needed
-    if source_sr is not None and source_sr != sampling_rate:
-        wav = librosa.resample(wav, source_sr, sampling_rate)
+    if source_sr is not None and source_sr != SAMPLING_RATE:
+        wav = librosa.resample(wav, orig_sr=source_sr, target_sr=SAMPLING_RATE)
         
     # Apply the preprocessing: normalize volume and shorten long silences 
     wav = normalize_volume(wav, audio_norm_target_dBFS, increase_only=True)
