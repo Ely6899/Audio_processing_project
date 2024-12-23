@@ -19,17 +19,18 @@ audio_hello = Path("Ely_Hello_World.flac")
 audio_test = Path("Ely_Test.flac")
 audio_book = Path("61-70968-0000.flac")
 
-if __name__ == '__main__':
-    #visualizer = Visualizations(disabled=True)
-    load_model(encoder_model_path, "cuda")
-    embedding_test = embed_utterance(preprocess_wav("Ely_Hello_World.flac", None)).reshape(1,-1)
-    #embedding_test = embed_utterance(preprocess_wav(audio_test, None)).reshape(1,-1)
-    #embedding_book = embed_utterance(preprocess_wav(audio_book, None)).reshape(1,-1)
+input_file: str | Path = "Ely_Hello_World.flac"
 
-    #np.save(Path("syntesizer_test.npy"),embedding_test)
+if __name__ == '__main__':
+    load_model(encoder_model_path, "cuda")
+    embedding_test = embed_utterance(preprocess_wav(input_file, None)).reshape(1,-1)
+
+    np.save(Path("syntesizer_test.npy"),embedding_test)
 
     print(np.load(Path("syntesizer_test.npy")))
 
+    # embedding_test = embed_utterance(preprocess_wav(audio_test, None)).reshape(1,-1)
+    # embedding_book = embed_utterance(preprocess_wav(audio_book, None)).reshape(1,-1)
     # vectors = np.vstack([embedding_hello, embedding_test, embedding_book])  # Shape (3, 256)
     #
     # # Compute pairwise cosine similarities
