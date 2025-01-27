@@ -19,7 +19,7 @@ audio_hello = Path("Ely_Hello_World.flac")
 audio_test = Path("Ely_Test.flac")
 audio_book = Path("61-70968-0000.flac")
 
-input_file: str | Path = "Ely_Hello_World.flac"
+
 
 if __name__ == '__main__':
     load_model(encoder_model_path, "cuda")

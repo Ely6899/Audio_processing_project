@@ -31,6 +31,7 @@ class Visualizations:
         self.update_every = update_every
         self.step_times = []
         self.losses = []
+        self.avg_losses = []
         self.eers = []
         print("Updating the visualizations every %d steps." % update_every)
         
@@ -115,6 +116,8 @@ class Visualizations:
                       (int(np.mean(self.step_times)), int(np.std(self.step_times)))
         print("\nStep %6d   Loss: %.4f   EER: %.4f   %s" %
               (step, np.mean(self.losses), np.mean(self.eers), time_string))
+
+        self.avg_losses.append(np.mean(self.losses))
         if not self.disabled:
             self.loss_win = self.vis.line(
                 [np.mean(self.losses)],
@@ -152,7 +155,7 @@ class Visualizations:
         self.eers.clear()
         self.step_times.clear()
         
-    def draw_projections(self, embeds, utterances_per_speaker, step, out_fpath=None,
+    def draw_projections(self, embeds, utterances_per_speaker, step, map_out_fpath=None, loss_out_fpath = None,
                          max_speakers=10):
         max_speakers = min(max_speakers, len(colormap))
         embeds = embeds[:max_speakers * utterances_per_speaker]
@@ -160,7 +163,6 @@ class Visualizations:
         n_speakers = len(embeds) // utterances_per_speaker
         ground_truth = np.repeat(np.arange(n_speakers), utterances_per_speaker)
         colors = [colormap[i] for i in ground_truth]
-        
         reducer = umap.UMAP()
         projected = reducer.fit_transform(embeds)
         plt.scatter(projected[:, 0], projected[:, 1], c=colors)
@@ -168,8 +170,22 @@ class Visualizations:
         plt.title("UMAP projection (step %d)" % step)
         if not self.disabled:
             self.projection_win = self.vis.matplot(plt, win=self.projection_win)
-        if out_fpath is not None:
-            plt.savefig(out_fpath)
+        if map_out_fpath is not None:
+            plt.savefig(map_out_fpath)
+        plt.clf()
+
+        # Plotting the graph
+        plt.figure(figsize=(8, 6))  # Set the figure size
+        plt.plot(self.avg_losses, label='Loss')  # Plot with markers and label
+        plt.title('Loss Over Iterations Until step %d' % step)  # Add a title
+        plt.xlabel('Iterations')  # Label for the x-axis
+        plt.ylabel('Loss')  # Label for the y-axis
+        plt.grid(True)  # Add a grid for better readability
+        plt.legend()  # Show the legend
+
+        # Save the plot
+        plt.savefig(loss_out_fpath, dpi=300, bbox_inches='tight')
+
         plt.clf()
         
     def save(self):

@@ -1,8 +1,11 @@
+import numpy as np
 import torch
 import torch.nn as nn
 from torch import optim
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
+
+from Models.SentimentAnalysis.Visualizations import plot_loss_per_epoch, plot_accuracy_per_epoch
 
 
 class SentimentModelHandler:
@@ -12,15 +15,23 @@ class SentimentModelHandler:
         self._train_dataset: Dataset = train_dataset
         self._val_dataset: Dataset = val_dataset
 
-        self._batch_size: int = kwargs.get('batch_size', 32)
+        self._batch_size: int = kwargs.get('batch_size', 8)
         self._lr: float = kwargs.get("learning_rate", 0.001)
-        self._criterion = kwargs.get("criterion", nn.CrossEntropyLoss)()
-        self._optimizer = kwargs.get("optimizer", optim.Adam)(self._model.parameters(), lr=self._lr)
 
         self._train_loader: DataLoader = DataLoader(self._train_dataset, self._batch_size, shuffle=True)
         self._val_loader: DataLoader = DataLoader(self._val_dataset, self._batch_size, shuffle=False)
 
+        self._class_weights = self._compute_class_weights()
+        print(f"Class Weights: {self._class_weights}")
+
+        self._criterion = kwargs.get("criterion", nn.CrossEntropyLoss)(weight=self._class_weights.to(self._device))
+        self._optimizer = kwargs.get("optimizer", optim.Adam)(self._model.parameters(), lr=self._lr)
+
         self._training_logs: dict = dict()
+
+        # Tuple structure is (Loss score, Accuracy score)
+        self._train_scores: list[tuple[float, float]] = []
+        self._val_scores: list[tuple[float, float]] = []
 
 
     def __train_one_epoch(self):
@@ -69,15 +80,20 @@ class SentimentModelHandler:
             train_loss, train_correct, train_total = self.__train_one_epoch()
             val_loss, val_correct, val_total = self.__validate()
 
+            train_accuracy = (train_correct / train_total) * 100.0
+            val_accuracy = (val_correct / val_total) * 100.0
+
             epoch_string: str = f"Epoch {epoch + 1}"
             results_string: str = f'Train Loss: {train_loss:.4f},\n' \
-                                  f'Train Accuracy: {(train_correct / train_total) * 100.0:.2f}%\n' \
+                                  f'Train Accuracy: {train_accuracy:.2f}%\n' \
                                   f'[{train_correct}/{train_total}]\n' \
                                   f'Val Loss: {val_loss:.4f},\n' \
-                                  f'Val Accuracy: {(val_correct / val_total) * 100.0:.2f}%\n' \
+                                  f'Val Accuracy: {val_accuracy:.2f}%\n' \
                                   f'[{val_correct}/{val_total}]'
 
             self._training_logs[epoch_string] = results_string
+            self._train_scores.append((train_loss, train_accuracy))
+            self._val_scores.append((val_loss, val_accuracy))
 
             if verbose:
                 print(f"Epoch {epoch + 1}")
@@ -91,6 +107,31 @@ class SentimentModelHandler:
                 f"Criterion: {self._criterion.__class__.__name__}\n"
                 f"Optimizer: {self._optimizer.__class__.__name__}")
 
+    def plot_losses(self, file_name: str | None = None):
+        file_name = f"{self._model.__class__.__name__}_losses" if None else file_name
+        train_losses = [scores[0] for scores in self._train_scores]
+        val_losses = [scores[0] for scores in self._val_scores]
+        plot_loss_per_epoch(file_save_name= file_name,
+                            training_loss=train_losses,
+                            validation_loss=val_losses)
+
+    def plot_accuracies(self, file_name: str | None = None):
+        file_name = f"{self._model.__class__.__name__}_accuracies" if None else file_name
+        train_accuracies = [scores[1] for scores in self._train_scores]
+        val_accuracies = [scores[1] for scores in self._val_scores]
+        plot_accuracy_per_epoch(file_save_name=file_name,
+                            training_accuracy=train_accuracies,
+                            validation_accuracy=val_accuracies)
+
+    def _compute_class_weights(self) -> torch.Tensor:
+        all_labels = np.concatenate([labels.numpy() for _, labels in self._train_loader])
+        class_counts = np.bincount(all_labels)
+
+        # Calculate class weights (inverse frequency)
+        total_samples = len(all_labels)
+        class_weights = total_samples / (class_counts + 1e-6)  # Avoid division by zero
+
+        return torch.tensor(class_weights, dtype=torch.float32)
 
 
 class EmotionClassifier0(nn.Module):
@@ -142,6 +183,53 @@ class EmotionClassifier1(nn.Module):
         # Apply third convolution layer
         x = self.conv3(x)
         x = self.relu3(x)
+
+        # Apply pooling layer
+        x = self.pool(x)
+
+        # Flatten the output before passing to the fully connected layer
+        x = x.view(x.size(0), -1)
+
+        # Fully connected layer
+        x = self.fc(x)
+
+        return x
+
+class EmotionClassifier2(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+        # First convolution layer with BatchNorm
+        self.conv1 = nn.Conv2d(1, 32, kernel_size=3, stride=1, padding=1)
+        self.bn1 = nn.BatchNorm2d(32)
+        self.relu1 = nn.ReLU()
+
+        # Residual stack with 10 filters
+        self.residual_stack = nn.Sequential(
+            nn.Conv2d(32, 10, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(10),
+            nn.ReLU(),
+            nn.Conv2d(10, 32, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(32)
+        )
+
+        # Pooling layer to reduce spatial dimensions
+        self.pool = nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
+
+        # Fully connected layer
+        self.fc = nn.Linear(32 * 8000 * 32, 7)
+
+    def forward(self, x):
+        # Apply first convolution layer
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu1(x)
+
+        # Apply residual stack
+        residual = x  # Save input for residual connection
+        x = self.residual_stack(x)
+        x += residual  # Add residual connection
+        x = torch.relu(x)  # Apply ReLU after residual addition
 
         # Apply pooling layer
         x = self.pool(x)

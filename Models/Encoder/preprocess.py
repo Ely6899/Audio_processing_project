@@ -4,7 +4,7 @@ from Models.Encoder.config import librispeech_datasets, anglophone_nationalites
 from datetime import datetime
 from Models.Encoder import audio
 from pathlib import Path
-from tqdm import tqdm
+#from tqdm import tqdm
 import numpy as np
 
 
@@ -112,8 +112,8 @@ def _preprocess_speaker_dirs(speaker_dirs, dataset_name, datasets_root, out_dir,
     
     # Process the utterances for each speaker
     with ThreadPool(8) as pool:
-        list(tqdm(pool.imap(preprocess_speaker, speaker_dirs), dataset_name, len(speaker_dirs),
-                  unit="speakers"))
+        list(pool.imap(preprocess_speaker, speaker_dirs), dataset_name, len(speaker_dirs),
+                  unit="speakers")
     logger.finalize()
     print("Done preprocessing %s.\n" % dataset_name)
 

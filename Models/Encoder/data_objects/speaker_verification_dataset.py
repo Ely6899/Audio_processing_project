@@ -3,18 +3,30 @@ from Models.Encoder.data_objects.speaker_batch import SpeakerBatch
 from Models.Encoder.data_objects.speaker import Speaker
 from Models.Encoder.params_data import partials_n_frames
 from torch.utils.data import Dataset, DataLoader
+from sklearn.model_selection import train_test_split
+
 from pathlib import Path
 
 # TODO: improve with a pool of speakers for data efficiency
 
 class SpeakerVerificationDataset(Dataset):
-    def __init__(self, datasets_root: Path):
+    def __init__(self, datasets_root: Path, split: str = "train", val_split = 0.2):
         self.root = datasets_root
         speaker_dirs = [f for f in self.root.glob("*") if f.is_dir()]
         if len(speaker_dirs) == 0:
             raise Exception("No speakers found. Make sure you are pointing to the directory "
                             "containing all preprocessed speaker directories.")
-        self.speakers = [Speaker(speaker_dir) for speaker_dir in speaker_dirs]
+        train_speakers, val_speakers = train_test_split(
+            speaker_dirs, test_size=val_split, random_state=42)
+
+        if split == "train":
+            selected_speakers = train_speakers
+        elif split == "val":
+            selected_speakers = val_speakers
+        else:
+            raise ValueError("Invalid split value. Use 'train' or 'val'.")
+
+        self.speakers = [Speaker(speaker_dir) for speaker_dir in selected_speakers]
         self.speaker_cycler = RandomCycler(self.speakers)
 
     def __len__(self):
