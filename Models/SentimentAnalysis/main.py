@@ -1,26 +1,18 @@
 from pathlib import Path
 
-#from Models.SentimentAnalysis.ConstPaths import TRAIN_DATA_CSV, DEV_DATA_CSV, MeldPaths
-from Models.SentimentAnalysis.Preprocess import audio_to_mel_spectogram
-from Models.SentimentAnalysis.PreprocessParams import SAMPLE_RATE
-from Models.SentimentAnalysis.Visualizations import plot_mel_spectrogram
 from Models.SentimentAnalysis.audio_dataset import EmotionDataset, RavdessRawData
-from Models.SentimentAnalysis.models import EmotionClassifier2, SentimentModelHandler, EmotionClassifier1
-from visualizations import Visualizations
+from Models.SentimentAnalysis.models import SentimentModelHandler, EmotionClassifier3
 
 if __name__ == '__main__':
     ravdess_raw_data = RavdessRawData()
 
-    print(ravdess_raw_data.train_data)
-    print(ravdess_raw_data.val_data)
-    print(ravdess_raw_data.test_data)
     #plot_mel_spectrogram(spectogram, SAMPLE_RATE)
 
     # Load datasets
-    # train_dataset = EmotionDataset(csv_file=TRAIN_DATA_CSV)
-    # val_dataset = EmotionDataset(csv_file=DEV_DATA_CSV)
-    #
-    # model_handler_base = SentimentModelHandler(EmotionClassifier1(), train_dataset=train_dataset, val_dataset=val_dataset)
+    train_dataset = EmotionDataset(ravdess_raw_data.train_data)
+    val_dataset = EmotionDataset(ravdess_raw_data.val_data)
+
+    # model_handler_base = SentimentModelHandler(EmotionClassifier0(), train_dataset=train_dataset, val_dataset=val_dataset)
     # model_handler_big = SentimentModelHandler(EmotionClassifier2(), train_dataset=train_dataset, val_dataset=val_dataset)
     #
     # model_handler_big.train_model(verbose=True)
@@ -30,6 +22,11 @@ if __name__ == '__main__':
     # model_handler_base.train_model(verbose=True)
     # model_handler_base.plot_losses(file_name="base_losses")
     # model_handler_base.plot_accuracies(file_name="base_accuracies")
+
+    model_handler_with_attention = SentimentModelHandler(EmotionClassifier3(), train_dataset=train_dataset, val_dataset=val_dataset)
+    model_handler_with_attention.train_model(verbose=True)
+    model_handler_with_attention.plot_losses(file_name="model_3_losses")
+    model_handler_with_attention.plot_accuracies(file_name="model_3_accuracies")
     #model_handler.train_model(10)
 
     # Data loaders

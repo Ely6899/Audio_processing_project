@@ -19,7 +19,7 @@ console_handler = logging.StreamHandler()
 # Set the log format
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 console_handler.setFormatter(formatter)
-logger.addHandler(console_handler)
+#logger.addHandler(console_handler)
 
 
 def audio_to_waveform(file_path: Path, target_sample_rate: int = SAMPLE_RATE):
