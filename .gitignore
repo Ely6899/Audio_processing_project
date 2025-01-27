@@ -8,6 +8,9 @@ denoiser_model/LibriSpeechNoisy/
 *.wav
 *.flac
 
+#Ignore numpy files
+*.npy
+
 # Ignore Python cache files
 __pycache__/
 .ipynb_checkpoints/
