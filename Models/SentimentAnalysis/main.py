@@ -4,7 +4,7 @@ from Models.SentimentAnalysis.audio_dataset import EmotionDataset, RavdessRawDat
 from Models.SentimentAnalysis.models import SentimentModelHandler, EmotionClassifier3
 
 if __name__ == '__main__':
-    ravdess_raw_data = RavdessRawData()
+    ravdess_raw_data = RavdessRawData() # assumes the root folder of the data is the one stored in ConstPaths.
 
     #plot_mel_spectrogram(spectogram, SAMPLE_RATE)
 

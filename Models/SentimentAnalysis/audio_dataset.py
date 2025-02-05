@@ -62,8 +62,7 @@ class RavdessRawData(AudioRawData):
 
         return set(train_files), set(val_files), set(test_files)
 
-
-def get_emotion_from_index(filename):
+def get_emotion_from_index(filename) -> str:
     numbers = re.findall(r'\d+', filename.name.__str__())
 
     index_emotion_mapping = {
