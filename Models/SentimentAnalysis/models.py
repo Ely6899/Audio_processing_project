@@ -22,7 +22,7 @@ class SentimentModelHandler:
         self._train_loader: DataLoader = DataLoader(self._train_dataset, self._batch_size, shuffle=True)
         self._val_loader: DataLoader = DataLoader(self._val_dataset, self._batch_size, shuffle=False)
 
-        self._class_weights = train_dataset.class_weights
+        self._class_weights = train_dataset.class_weights # noam: i think it assumes the Dataset has a class_weights member, which isn't trivial.
         print(f"Class Weights: {self._class_weights}")
 
         self._criterion = kwargs.get("criterion", nn.CrossEntropyLoss)(weight=self._class_weights.to(self._device))
@@ -78,7 +78,7 @@ class SentimentModelHandler:
 
         print(f"Training model with device: {self._device}")
         for epoch in range(epochs):
-            train_loss, train_correct, train_total = self.__train_one_epoch()
+            train_loss, train_correct, train_total = self.__train_one_epoch() # noam question eli: does train loss is the average train loss per batch?
             val_loss, val_correct, val_total = self.__validate()
 
             train_accuracy = (train_correct / train_total) * 100.0

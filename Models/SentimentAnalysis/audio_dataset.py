@@ -81,7 +81,6 @@ def get_emotion_from_index(filename) -> str:
     return emotion
 
 
-
 class EmotionDataset(Dataset):
     def __init__(self, file_paths: set):
         self._data = list(file_paths)

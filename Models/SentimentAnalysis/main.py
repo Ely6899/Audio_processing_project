@@ -6,8 +6,6 @@ from Models.SentimentAnalysis.models import SentimentModelHandler, EmotionClassi
 if __name__ == '__main__':
     ravdess_raw_data = RavdessRawData() # assumes the root folder of the data is the one stored in ConstPaths.
 
-    #plot_mel_spectrogram(spectogram, SAMPLE_RATE)
-
     # Load datasets
     train_dataset = EmotionDataset(ravdess_raw_data.train_data)
     val_dataset = EmotionDataset(ravdess_raw_data.val_data)
