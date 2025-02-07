@@ -34,6 +34,10 @@ class SentimentModelHandler:
         self._train_scores: list[tuple[float, float]] = []
         self._val_scores: list[tuple[float, float]] = []
 
+        # New lists to store the true labels and predicted labels for confusion matrix
+        self._true_labels = []
+        self._pred_labels = []
+
 
     def __train_one_epoch(self):
         self._model.train()
@@ -60,6 +64,10 @@ class SentimentModelHandler:
         self._model.eval()
         running_loss = 0.0
         correct = 0
+
+        # Clear true and predicted labels at the start of validation
+        self._true_labels.clear()
+        self._pred_labels.clear()
 
         with torch.no_grad():
             for mel_spec, label in tqdm(self._val_loader, desc="Model validation"):
@@ -125,12 +133,13 @@ class SentimentModelHandler:
                             validation_accuracy=val_accuracies)
 
 
+
 class EmotionClassifier0(nn.Module):
     def __init__(self):
         super().__init__()
         self.conv = nn.Conv2d(1, 32, kernel_size=3, stride=1, padding=1)
         self.relu = nn.ReLU()
-        self.fc = nn.Linear(32 * (TARGET_FRAMES // 2) * (FREQUENCY_BIN_COUNT // 2), 8)
+        self.fc = nn.Linear(32 * TARGET_FRAMES * FREQUENCY_BIN_COUNT, 8)
 
     def forward(self, x):
         x = self.conv(x)
@@ -237,24 +246,24 @@ class EmotionClassifier3(nn.Module):
         super().__init__()
         # First convolution layer with BatchNorm and Dropout
         self.conv1 = nn.Conv2d(1, 16, kernel_size=3, stride=1, padding=1)
-        self.bn1 = nn.BatchNorm2d(16)
+        self.bn1 = nn.BatchNorm2d(32)
         self.relu1 = nn.ReLU()
         self.dropout1 = nn.Dropout(p=0.3)
 
         # Residual stack
         self.residual_stack = nn.Sequential(
-            nn.Conv2d(16, 8, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(8),
+            nn.Conv2d(16, 64, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(64),
             nn.ReLU(),
-            nn.Conv2d(8, 16, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(16)
+            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(64)
         )
 
         # Pooling layer to reduce spatial dimensions
         self.pool = nn.AdaptiveAvgPool2d(1)
 
         # Fully connected layer
-        self.fc = nn.Linear(16, 8)
+        self.fc = nn.Linear(64, 8)
 
     def forward(self, x):
         x = self.conv1(x)
@@ -320,4 +329,55 @@ class ModelWithAttention(nn.Module):
         x = self.fc(x)
 
         return x
+
+
+class ResidualBlock(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super(ResidualBlock, self).__init__()
+        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(out_channels)
+        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1, bias=False)
+        self.bn2 = nn.BatchNorm2d(out_channels)
+
+        # Skip connection
+        self.skip = nn.Sequential()
+        if in_channels != out_channels:
+            self.skip = nn.Sequential(
+                nn.Conv2d(in_channels, out_channels, kernel_size=1, bias=False),
+                nn.BatchNorm2d(out_channels)
+            )
+
+    def forward(self, x):
+        identity = self.skip(x)
+        out = torch.relu(self.bn1(self.conv1(x)))
+        out = self.bn2(self.conv2(out))
+        out += identity
+        return torch.relu(out)
+
+
+class ResidualModel(nn.Module):
+    def __init__(self):
+        super(ResidualModel, self).__init__()
+        self.initial_conv = nn.Conv2d(1, 32, kernel_size=3, padding=1, bias=False)
+        self.initial_bn = nn.BatchNorm2d(32)
+
+        self.residual_stack1 = ResidualBlock(32, 64)
+        self.residual_stack2 = ResidualBlock(64, 64)
+        self.residual_stack3 = ResidualBlock(64, 64)
+
+        self.flatten = nn.Flatten()
+        self.fc1 = nn.Linear(64 * TARGET_FRAMES * FREQUENCY_BIN_COUNT, 128)  # Assuming 8x8 feature maps after Conv layers
+        #self.fc2 = nn.Linear(128, 64)
+        self.output_layer = nn.Linear(128, 8)
+
+    def forward(self, x):
+        x = torch.relu(self.initial_bn(self.initial_conv(x)))
+        x = self.residual_stack1(x)
+        x = self.residual_stack2(x)
+        x = self.residual_stack3(x)
+
+        x = self.flatten(x)
+        x = torch.relu(self.fc1(x))
+        x = torch.relu(self.fc2(x))
+        return self.output_layer(x)
 

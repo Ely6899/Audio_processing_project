@@ -11,10 +11,12 @@ from Models.SentimentAnalysis.ConstPaths import RavdessPaths
 from Models.SentimentAnalysis.Preprocess import audio_to_mel_spectogram
 
 class AudioRawData(ABC):
-    def __init__(self, data_root: Path, supported_files: set):
+    def __init__(self, data_root: Path, supported_files: set[str]):
         self._data_root = data_root
         self._supported_files = supported_files
-        self._file_paths: set = self._scan_supported_files()
+        self._data: set = self._scan_supported_files()
+        self._file_paths, self._file_labels = zip(*list(self._data))
+
 
         self._train_data, self._val_data, self._test_data = self._train_val_test_split()
 
@@ -28,7 +30,7 @@ class AudioRawData(ABC):
 
     @property
     def all_data(self) -> set:
-        return self._file_paths
+        return self._data
 
     @property
     def train_data(self) -> set:
@@ -48,21 +50,33 @@ class RavdessRawData(AudioRawData):
         super().__init__(RavdessPaths.AUDIO_FILES_DATA, {".wav"})
 
     def _scan_supported_files(self) -> set:
-        return {
+        files = {
             file for file in Path(self._data_root).rglob('*')
             if file.is_file() and any(file.name.endswith(suffix) for suffix in self._supported_files)
         }
 
+        result = set(map(lambda x: (x, get_emotion_from_index(x)), files))
+        return result
+
     def _train_val_test_split(self, test_size=0.2, val_size=0.1, random_state=None) -> Tuple[set, set, set]:
-        train_files, temp_files = train_test_split(list(self._file_paths), test_size=test_size + val_size,
-                                                   random_state=random_state)
+        train_paths, temp_paths, train_labels, temp_labels = train_test_split(
+            self._file_paths, self._file_labels, test_size=0.2, stratify=self._file_labels, random_state=42
+        )
 
-        val_size_adj = val_size / (test_size + val_size)
-        val_files, test_files = train_test_split(temp_files, test_size=1 - val_size_adj, random_state=random_state)
+        # Validation + Test split (50% val, 50% test from temp, making each 10% of total)
+        val_paths, test_paths, val_labels, test_labels = train_test_split(
+            temp_paths, temp_labels, test_size=0.5, stratify=temp_labels, random_state=42
+        )
 
-        return set(train_files), set(val_files), set(test_files)
+        # Convert back to sets
+        train_set = set(zip(train_paths, train_labels))
+        val_set = set(zip(val_paths, val_labels))
+        test_set = set(zip(test_paths, test_labels))
 
-def get_emotion_from_index(filename) -> str:
+        return train_set, val_set, test_set
+
+
+def get_emotion_from_index(filename):
     numbers = re.findall(r'\d+', filename.name.__str__())
 
     index_emotion_mapping = {
@@ -81,10 +95,11 @@ def get_emotion_from_index(filename) -> str:
     return emotion
 
 
+
 class EmotionDataset(Dataset):
     def __init__(self, file_paths: set):
         self._data = list(file_paths)
-        self._labels = list(filter(None, map(get_emotion_from_index, self._data)))
+        self._paths , self._labels = zip(*self._data)
 
         self.__label_encoder = LabelEncoder()
         self._labels = torch.tensor(self.__label_encoder.fit_transform(self._labels))
@@ -99,7 +114,7 @@ class EmotionDataset(Dataset):
         return len(self._data)
 
     def __getitem__(self, idx):
-        file_path = self._data[idx]
+        file_path = self._paths[idx]
         label = self._labels[idx]
 
         mel_spectrogram = audio_to_mel_spectogram(file_path=file_path)

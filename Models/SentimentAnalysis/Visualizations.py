@@ -2,8 +2,6 @@ import librosa.display
 from matplotlib import pyplot as plt
 import torch
 
-from Models.SentimentAnalysis.PreprocessParams import FREQUENCY_BIN_COUNT
-
 def plot_waveform(waveform, sample_rate):
     # Plot each channel separately
     num_channels, num_frames = waveform.shape
@@ -81,3 +79,33 @@ def plot_accuracy_per_epoch(file_save_name: str, **kwargs):
         plt.grid(True)
         plt.savefig(f"{file_save_name}.png")
 
+
+# def plot_confusion_matrix(model, dataloader, device):
+#     # Set the model to evaluation mode
+#     model.eval()
+#
+#     all_labels = []
+#     all_preds = []
+#
+#     with torch.no_grad():
+#         for inputs, labels in dataloader:
+#             inputs, labels = inputs.to(device), labels.to(device)
+#
+#             # Get model predictions
+#             outputs = model(inputs)
+#             _, preds = torch.max(outputs, 1)
+#
+#             all_labels.extend(labels.cpu().numpy())
+#             all_preds.extend(preds.cpu().numpy())
+#
+#     # Compute confusion matrix
+#     cm = confusion_matrix(all_labels, all_preds)
+#
+#     # Plot confusion matrix using seaborn heatmap
+#     plt.figure(figsize=(8, 6))
+#     sns.heatmap(cm, annot=True, fmt='g', cmap='Blues', xticklabels=np.unique(all_labels),
+#                 yticklabels=np.unique(all_labels))
+#     plt.xlabel('Predicted')
+#     plt.ylabel('True')
+#     plt.title('Confusion Matrix')
+#     plt.show()

@@ -1,10 +1,8 @@
-from pathlib import Path
-
 from Models.SentimentAnalysis.audio_dataset import EmotionDataset, RavdessRawData
-from Models.SentimentAnalysis.models import SentimentModelHandler, EmotionClassifier3
+from Models.SentimentAnalysis.models import SentimentModelHandler, ResidualModel
 
 if __name__ == '__main__':
-    ravdess_raw_data = RavdessRawData() # assumes the root folder of the data is the one stored in ConstPaths.
+    ravdess_raw_data = RavdessRawData()
 
     # Load datasets
     train_dataset = EmotionDataset(ravdess_raw_data.train_data)
@@ -21,10 +19,10 @@ if __name__ == '__main__':
     # model_handler_base.plot_losses(file_name="base_losses")
     # model_handler_base.plot_accuracies(file_name="base_accuracies")
 
-    model_handler_with_attention = SentimentModelHandler(EmotionClassifier3(), train_dataset=train_dataset, val_dataset=val_dataset)
+    model_handler_with_attention = SentimentModelHandler(ResidualModel(), train_dataset=train_dataset, val_dataset=val_dataset)
     model_handler_with_attention.train_model(verbose=True)
-    model_handler_with_attention.plot_losses(file_name="model_3_losses")
-    model_handler_with_attention.plot_accuracies(file_name="model_3_accuracies")
+    model_handler_with_attention.plot_losses(file_name="residual_losses_2")
+    model_handler_with_attention.plot_accuracies(file_name="Residual_accuracies_2")
     #model_handler.train_model(10)
 
     # Data loaders
