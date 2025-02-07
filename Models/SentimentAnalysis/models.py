@@ -1,4 +1,3 @@
-import numpy as np
 import torch
 import torch.nn as nn
 from torch import optim
@@ -7,10 +6,14 @@ from tqdm import tqdm
 
 from Models.SentimentAnalysis.PreprocessParams import TARGET_FRAMES, FREQUENCY_BIN_COUNT
 from Models.SentimentAnalysis.Visualizations import plot_loss_per_epoch, plot_accuracy_per_epoch
+from Models.SentimentAnalysis.audio_dataset import EmotionDataset
 
 
 class SentimentModelHandler:
-    def __init__(self, model: nn.Module, train_dataset: Dataset, val_dataset: Dataset, **kwargs):
+    """
+    Wrapper class for general model hyper-parameters.
+    """
+    def __init__(self, model: nn.Module, train_dataset: EmotionDataset, val_dataset: EmotionDataset, **kwargs):
         self._device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self._model: nn.Module = model
         self._train_dataset: Dataset = train_dataset
@@ -22,7 +25,7 @@ class SentimentModelHandler:
         self._train_loader: DataLoader = DataLoader(self._train_dataset, self._batch_size, shuffle=True)
         self._val_loader: DataLoader = DataLoader(self._val_dataset, self._batch_size, shuffle=False)
 
-        self._class_weights = train_dataset.class_weights # noam: i think it assumes the Dataset has a class_weights member, which isn't trivial.
+        self._class_weights = train_dataset.class_weights
         print(f"Class Weights: {self._class_weights}")
 
         self._criterion = kwargs.get("criterion", nn.CrossEntropyLoss)(weight=self._class_weights.to(self._device))
@@ -40,6 +43,10 @@ class SentimentModelHandler:
 
 
     def __train_one_epoch(self):
+        """
+        Trains a single epoch across a dataloader.
+        @return: Loss average across batches, number of correct classifications and total samples.
+        """
         self._model.train()
         running_loss = 0.0
         correct = 0
@@ -61,6 +68,10 @@ class SentimentModelHandler:
         return running_loss / len(self._train_loader), correct, total_samples
 
     def __validate(self):
+        """
+        Validates a single epoch across a dataloader.
+        @return: Loss average across batches, number of correct classifications and total samples.
+        """
         self._model.eval()
         running_loss = 0.0
         correct = 0
@@ -82,6 +93,11 @@ class SentimentModelHandler:
         return running_loss / len(self._val_loader), correct, total_samples
 
     def train_model(self, epochs: int = 10, verbose: bool = False):
+        """
+        Applies the entire training logic and saves the results.
+        @param epochs: Number of epochs to train the model. Defaults to 10.
+        @param verbose: Verbosity of results. Defaults to False.
+        """
         self._model.to(self._device)
 
         print(f"Training model with device: {self._device}")
@@ -367,8 +383,8 @@ class ResidualModel(nn.Module):
 
         self.flatten = nn.Flatten()
         self.fc1 = nn.Linear(64 * TARGET_FRAMES * FREQUENCY_BIN_COUNT, 128)  # Assuming 8x8 feature maps after Conv layers
-        #self.fc2 = nn.Linear(128, 64)
-        self.output_layer = nn.Linear(128, 8)
+        self.fc2 = nn.Linear(128, 64)
+        self.output_layer = nn.Linear(64, 8)
 
     def forward(self, x):
         x = torch.relu(self.initial_bn(self.initial_conv(x)))

@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Tuple
+from typing import Tuple, Iterable
 import re
 import torch
 from sklearn.model_selection import train_test_split
@@ -8,16 +8,18 @@ from pathlib import Path
 from sklearn.preprocessing import LabelEncoder
 
 from Models.SentimentAnalysis.ConstPaths import RavdessPaths
-from Models.SentimentAnalysis.Preprocess import audio_to_mel_spectogram
+from Models.SentimentAnalysis.Preprocess import audio_to_mel_spectrogram
 
 class AudioRawData(ABC):
-    def __init__(self, data_root: Path, supported_files: set[str]):
-        self._data_root = data_root
-        self._supported_files = supported_files
-        self._data: set = self._scan_supported_files()
+    """
+    Wrapper abstract class to handle Dataset saving in run-time.
+    """
+    def __init__(self, data_root: Path, supported_formats: set[str]):
+        self._data_root: Path = data_root
+        self._supported_formats: set[str] = supported_formats
+        self._data: set[Iterable] = self._scan_supported_files()
+
         self._file_paths, self._file_labels = zip(*list(self._data))
-
-
         self._train_data, self._val_data, self._test_data = self._train_val_test_split()
 
     @abstractmethod
@@ -45,20 +47,30 @@ class AudioRawData(ABC):
         return self._test_data
 
 class RavdessRawData(AudioRawData):
-
     def __init__(self):
         super().__init__(RavdessPaths.AUDIO_FILES_DATA, {".wav"})
 
-    def _scan_supported_files(self) -> set:
+    def _scan_supported_files(self) -> set[Tuple[Path, str]]:
+        """
+        Scans and saves the file paths of the model and a relevant label based on the index in the name.
+        @return: A set of tuples, each tuple holds (file path, label).
+        """
         files = {
             file for file in Path(self._data_root).rglob('*')
-            if file.is_file() and any(file.name.endswith(suffix) for suffix in self._supported_files)
+            if file.is_file() and any(file.name.endswith(suffix) for suffix in self._supported_formats)
         }
 
-        result = set(map(lambda x: (x, get_emotion_from_index(x)), files))
+        result = set(map(lambda x: (x, RavdessRawData.__get_emotion_from_index(x)), files))
         return result
 
-    def _train_val_test_split(self, test_size=0.2, val_size=0.1, random_state=None) -> Tuple[set, set, set]:
+    def _train_val_test_split(self, test_size: float=0.2, val_size: float=0.1, random_state=None) -> Tuple[set, set, set]:
+        """
+        Applies stratified train_val_test split.
+        @param test_size: Percentage of test size.
+        @param val_size: Percentage of val size.
+        @param random_state: Put a specific number to ensure determinism.
+        @return: Three sets of Train, Val, Test.
+        """
         train_paths, temp_paths, train_labels, temp_labels = train_test_split(
             self._file_paths, self._file_labels, test_size=0.2, stratify=self._file_labels, random_state=42
         )
@@ -76,23 +88,30 @@ class RavdessRawData(AudioRawData):
         return train_set, val_set, test_set
 
 
-def get_emotion_from_index(filename):
-    numbers = re.findall(r'\d+', filename.name.__str__())
+    @staticmethod
+    def __get_emotion_from_index(filename):
+        """
+        For RAVDESS, label is indicated in the third number in the name. This function handles mapping it to a
+        readable label.
+        @param filename: File path from RAVDESS dataset.
+        @return: Label of the file according to the index.
+        """
+        numbers = re.findall(r'\d+', filename.name.__str__())
 
-    index_emotion_mapping = {
-        '01': 'neutral',
-        '02': 'calm',
-        '03': 'happy',
-        '04': 'sad',
-        '05': 'angry',
-        '06': 'fearful',
-        '07': 'disgust',
-        '08': 'surprised'
-    }
+        index_emotion_mapping = {
+            '01': 'neutral',
+            '02': 'calm',
+            '03': 'happy',
+            '04': 'sad',
+            '05': 'angry',
+            '06': 'fearful',
+            '07': 'disgust',
+            '08': 'surprised'
+        }
 
-    emotion_index = numbers[2]
-    emotion = index_emotion_mapping[emotion_index]
-    return emotion
+        emotion_index = numbers[2]
+        emotion = index_emotion_mapping[emotion_index]
+        return emotion
 
 
 
@@ -117,7 +136,7 @@ class EmotionDataset(Dataset):
         file_path = self._paths[idx]
         label = self._labels[idx]
 
-        mel_spectrogram = audio_to_mel_spectogram(file_path=file_path)
+        mel_spectrogram = audio_to_mel_spectrogram(file_path=file_path)
         label = label.long()
 
         return mel_spectrogram, label

@@ -1,6 +1,11 @@
+import os.path
+
 import librosa.display
 from matplotlib import pyplot as plt
 import torch
+
+from Models.SentimentAnalysis.ConstPaths import ProjectPaths
+
 
 def plot_waveform(waveform, sample_rate):
     # Plot each channel separately
@@ -55,7 +60,8 @@ def plot_loss_per_epoch(file_save_name: str, **kwargs):
         plt.title('Training and Validation Loss per Epoch')
         plt.legend()
         plt.grid(True)
-        plt.savefig(f"{file_save_name}.png")
+        os.makedirs(ProjectPaths.MODEL_RESULTS, exist_ok=True)
+        plt.savefig(os.path.join(ProjectPaths.MODEL_RESULTS, f"{file_save_name}.png"))
 
 def plot_accuracy_per_epoch(file_save_name: str, **kwargs):
     training_accuracy = kwargs.get("training_accuracy", None)
@@ -77,7 +83,8 @@ def plot_accuracy_per_epoch(file_save_name: str, **kwargs):
         plt.title('Training and Validation Accuracy per Epoch')
         plt.legend()
         plt.grid(True)
-        plt.savefig(f"{file_save_name}.png")
+        os.makedirs(ProjectPaths.MODEL_RESULTS, exist_ok=True)
+        plt.savefig(os.path.join(ProjectPaths.MODEL_RESULTS, f"{file_save_name}.png"))
 
 
 # def plot_confusion_matrix(model, dataloader, device):

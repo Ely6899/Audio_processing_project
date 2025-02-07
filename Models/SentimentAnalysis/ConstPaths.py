@@ -2,6 +2,9 @@ import os.path
 from enum import EnumType
 from pathlib import Path
 
+class ProjectPaths(EnumType):
+    MODEL_RESULTS = Path(os.path.join("Model Results"))
+
 class MeldPaths(EnumType):
     AUDIO_FILES_DATA = Path(os.path.join("wav_splits"))
     TRAIN_DATA_CSV = Path(os.path.join("train.csv"))

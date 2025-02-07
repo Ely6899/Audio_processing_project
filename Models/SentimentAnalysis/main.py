@@ -1,5 +1,5 @@
-from Models.SentimentAnalysis.audio_dataset import EmotionDataset, RavdessRawData
-from Models.SentimentAnalysis.models import SentimentModelHandler, ResidualModel
+from audio_dataset import EmotionDataset, RavdessRawData
+from models import SentimentModelHandler, ResidualModel
 
 if __name__ == '__main__':
     ravdess_raw_data = RavdessRawData()
@@ -21,8 +21,8 @@ if __name__ == '__main__':
 
     model_handler_with_attention = SentimentModelHandler(ResidualModel(), train_dataset=train_dataset, val_dataset=val_dataset)
     model_handler_with_attention.train_model(verbose=True)
-    model_handler_with_attention.plot_losses(file_name="residual_losses_2")
-    model_handler_with_attention.plot_accuracies(file_name="Residual_accuracies_2")
+    model_handler_with_attention.plot_losses(file_name="residual_losses_test")
+    model_handler_with_attention.plot_accuracies(file_name="Residual_accuracies_test")
     #model_handler.train_model(10)
 
     # Data loaders

@@ -23,10 +23,17 @@ console_handler.setFormatter(formatter)
 
 
 def audio_to_waveform(file_path: Path, target_sample_rate: int = SAMPLE_RATE):
+    """
+    Given audio file path and target sample rate, extracts waveform data.
+    @param file_path: Audio file path.
+    @param target_sample_rate: Desired sample rate.
+    @return: Waveform data and the target sample rate.
+    """
     waveform, loaded_sample_rate = torchaudio.load(uri=file_path)
     logger.debug(f"Loaded audio file with shape: {waveform.shape}")
 
-    if waveform.shape[0] > 1:  # Check if there are multiple channels
+    #If there are multiple channels, apply mean across dimensions to convert to mono.
+    if waveform.shape[0] > 1:
         waveform = waveform.mean(dim=0, keepdim=True)
 
     if loaded_sample_rate != target_sample_rate:
@@ -37,15 +44,24 @@ def audio_to_waveform(file_path: Path, target_sample_rate: int = SAMPLE_RATE):
     return waveform, target_sample_rate
 
 
-def audio_to_mel_spectogram(file_path: Path,
+def audio_to_mel_spectrogram(file_path: Path,
                             sample_rate: int = SAMPLE_RATE,
                             n_fft = N_FFT,
                             window_length = WINDOW_LENGTH,
                             hop_length = HOP_LENGTH,
                             n_mels: int = FREQUENCY_BIN_COUNT,
                             max_length_in_seconds: float = MAX_SPECTOGRAM_DURATION_IN_SECONDS):
-
-
+    """
+    Given audio file path, extracts its waveform and from it creates a mel-spectrogram.
+    @param file_path: Audio file path.
+    @param sample_rate: Desired sample rate.
+    @param n_fft: Number of fft values. Defaults to the N_FFT preprocess macro.
+    @param window_length: Spectrogram window length. Defaults to WINDOW_LENGTH marco.
+    @param hop_length: Hop length in frames for spectrogram.
+    @param n_mels: Number of frequency bins for the spectrogram. Defaults to FREQUENCY_BIN_COUNT macro.
+    @param max_length_in_seconds: Limit on the length of spectrogram in seconds. Defaults to MAX_SPECTOGRAM_DURATION_IN_SECONDS
+    @return: Mel-spectrogram with the desired attributes.
+    """
     waveform, sample_rate = audio_to_waveform(file_path, sample_rate)
 
     mel_transform = MelSpectrogram(sample_rate=sample_rate,
@@ -56,6 +72,7 @@ def audio_to_mel_spectogram(file_path: Path,
                                    ,normalized=True,
                                    center=False)
     mel_spectrogram = mel_transform(waveform)
+
     logger.debug(f"Spectogram shape: {mel_spectrogram.shape}\n"
                  f"Num of channels: {mel_spectrogram.shape[0]}\n"
                  f"Num of frequency bins: {mel_spectrogram.shape[1]}\n"
@@ -108,27 +125,3 @@ def pad_spectrogram_to_max_duration(spectrogram, max_duration_seconds, sample_ra
         logger.debug(f"Padded spectrogram to {target_frames} frames")
 
     return spectrogram
-
-
-# def save_datasets_from_csv(csv_path, output_dir, split_name):
-#     """
-#     Preprocess audio recordings into mel spectrogram datasets from a given CSV file.
-#     """
-#     # Load CSV
-#     data = pd.read_csv(csv_path)
-#     audio_paths = data['path'].tolist()
-#     labels = data['label'].tolist()
-#
-#     # Prepare directory
-#     split_dir = os.path.join(output_dir, split_name)
-#     os.makedirs(split_dir, exist_ok=True)
-#
-#     # Save spectrograms
-#     for i, (path, label) in enumerate(zip(audio_paths, labels)):
-#         try:
-#             mel_spec = preprocess_audio_to_mel(path)
-#             np.save(os.path.join(split_dir.__str__(), f"{i}_spec.npy"), mel_spec)
-#             with open(os.path.join(split_dir.__str__(), f"{i}_label.txt"), 'w') as f:
-#                 f.write(str(label))
-#         except Exception as e:
-#             print(f"Error processing {path}: {e}")
