@@ -30,6 +30,7 @@ class SentimentModelHandler:
         print(f"Class Weights: {self._class_weights}")
 
         self._criterion = kwargs.get("criterion", nn.CrossEntropyLoss)(weight=self._class_weights.to(self._device))
+        #TODO: Consider adaptive LR and change to SGD(Benchmark between Handler instances).
         self._optimizer = kwargs.get("optimizer", optim.Adam)(self._model.parameters(), lr=self._lr)
 
         self._training_logs: dict = dict()
@@ -409,6 +410,8 @@ class ResidualModel(nn.Module):
         self.flatten = nn.Flatten()
         self.fc1 = nn.Linear(64 * TARGET_FRAMES * FREQUENCY_BIN_COUNT, 128)  # Assuming 8x8 feature maps after Conv layers
         self.fc2 = nn.Linear(128, 64)
+        #TODO: Add dropout between FC layers.
+
         self.output_layer = nn.Linear(64, 8)
 
     def forward(self, x):
