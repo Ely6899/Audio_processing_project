@@ -7,14 +7,14 @@ import torch.nn.functional as F
 
 from PreprocessParams import TARGET_FRAMES, FREQUENCY_BIN_COUNT
 from Visualizations import plot_loss_per_epoch, plot_accuracy_per_epoch
-from audio_dataset import EmotionDataset
+from audio_dataset import EmotionSpecDataset
 
 
 class SentimentModelHandler:
     """
     Wrapper class for general model hyper-parameters.
     """
-    def __init__(self, model: nn.Module, train_dataset: EmotionDataset, val_dataset: EmotionDataset, **kwargs):
+    def __init__(self, model: nn.Module, train_dataset: EmotionSpecDataset, val_dataset: EmotionSpecDataset, **kwargs):
         self._device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self._model: nn.Module = model
         self._train_dataset: Dataset = train_dataset

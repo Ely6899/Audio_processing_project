@@ -1,13 +1,19 @@
 from models import ResNetWithAttention, RavdessPaperModel
-from audio_dataset import EmotionDataset, RavdessRawData
+from audio_dataset import EmotionSpecDataset, EmotionWaveDataset, RavdessRawData
 from models import SentimentModelHandler
+from pprint import pprint 
+
 
 if __name__ == '__main__':
     ravdess_raw_data = RavdessRawData()
-
+    
+    # pprint(list(ravdess_raw_data.all_data)[:5])
+    # print(type(ravdess_raw_data.all_data))
+    
+    
     # Load datasets
-    train_dataset = EmotionDataset(ravdess_raw_data.train_data)
-    val_dataset = EmotionDataset(ravdess_raw_data.val_data)
+    train_dataset = EmotionSpecDataset(ravdess_raw_data.train_data)
+    val_dataset = EmotionSpecDataset(ravdess_raw_data.val_data)
 
     # model_handler_base = SentimentModelHandler(EmotionClassifier0(), train_dataset=train_dataset, val_dataset=val_dataset)
     # model_handler_big = SentimentModelHandler(EmotionClassifier2(), train_dataset=train_dataset, val_dataset=val_dataset)

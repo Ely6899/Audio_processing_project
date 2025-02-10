@@ -8,7 +8,7 @@ from pathlib import Path
 from sklearn.preprocessing import LabelEncoder
 
 from ConstPaths import RavdessPaths
-from Preprocess import audio_to_mel_spectrogram
+from Preprocess import audio_to_mel_spectrogram, audio_to_waveform
 
 class AudioRawData(ABC):
     """
@@ -113,9 +113,7 @@ class RavdessRawData(AudioRawData):
         emotion = index_emotion_mapping[emotion_index]
         return emotion
 
-
-
-class EmotionDataset(Dataset):
+class EmotionSpecDataset(Dataset):
     def __init__(self, file_paths: set):
         self._data = list(file_paths)
         self._paths , self._labels = zip(*self._data)
@@ -140,6 +138,47 @@ class EmotionDataset(Dataset):
         label = label.long()
 
         return mel_spectrogram, label
+
+    def decode_label(self, encoded_label):
+        return self.__label_encoder.inverse_transform([encoded_label])[0]
+
+    def __compute_class_weights(self) -> torch.Tensor:
+        """
+        Computes class weights based on the frequency of each class in the dataset.
+
+        Returns:
+            torch.Tensor: Tensor of class weights (inverse frequency).
+        """
+        class_counts = torch.bincount(self._labels, minlength=self.num_classes)
+        total_samples = len(self._labels)
+        class_weights = total_samples / (class_counts + 1e-6)  # Avoid division by zero
+        return class_weights.float()
+
+class EmotionWaveDataset(Dataset):
+    def __init__(self, file_paths: set):
+        self._data = list(file_paths)
+        self._paths , self._labels = zip(*self._data)
+
+        self.__label_encoder = LabelEncoder()
+        self._labels = torch.tensor(self.__label_encoder.fit_transform(self._labels))
+
+        # Get the number of classes
+        self.num_classes = len(self.__label_encoder.classes_)
+
+        # Compute class weights
+        self.class_weights = self.__compute_class_weights()
+
+    def __len__(self):
+        return len(self._data)
+
+    def __getitem__(self, idx):
+        file_path = self._paths[idx]
+        label = self._labels[idx]
+
+        waveform = audio_to_waveform(file_path=file_path)
+        label = label.long()
+
+        return waveform, label
 
     def decode_label(self, encoded_label):
         return self.__label_encoder.inverse_transform([encoded_label])[0]
