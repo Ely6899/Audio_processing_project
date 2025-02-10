@@ -3,6 +3,7 @@ import torch.nn as nn
 from torch import optim
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
+import torch.nn.functional as F
 
 from PreprocessParams import TARGET_FRAMES, FREQUENCY_BIN_COUNT
 from Visualizations import plot_loss_per_epoch, plot_accuracy_per_epoch
@@ -346,6 +347,31 @@ class ModelWithAttention(nn.Module):
 
         return x
 
+class RavdessPaperModel(nn.Module):
+    def __init__(self):
+        super(RavdessPaperModel, self).__init__()
+        self.conv2 = nn.Conv2d(in_channels=1, out_channels=64, kernel_size=5, padding='same')
+        self.dropout = nn.Dropout(0.2)
+        self.fc = None  # Will define the fully connected layer dynamically
+
+    def forward(self, x):
+        # x.shape is (batch_size, num_channels, sequence_length)
+        x = self.conv2(x)  # After Conv1D: (batch_size, out_channels, sequence_length)
+        x = F.relu(x)
+        x = self.dropout(x)
+
+        # Flatten the output for the fully connected layer (batch_size, -1)
+        x = x.view(x.size(0), -1)
+
+        # Define the fully connected layer dynamically based on output shape after conv1
+        if self.fc is None:
+            # Calculate the shape dynamically
+            conv_out_shape = x.shape[1]
+            self.fc = nn.Linear(conv_out_shape, 8).to("cuda")  # Define the fc layer for dynamic shape
+
+        x = self.fc(x)
+        return x
+
 
 class ResidualBlock(nn.Module):
     def __init__(self, in_channels, out_channels):
@@ -369,7 +395,6 @@ class ResidualBlock(nn.Module):
         out = self.bn2(self.conv2(out))
         out += identity
         return torch.relu(out)
-
 
 class ResidualModel(nn.Module):
     def __init__(self):
@@ -396,4 +421,139 @@ class ResidualModel(nn.Module):
         x = torch.relu(self.fc1(x))
         x = torch.relu(self.fc2(x))
         return self.output_layer(x)
+
+"""Emo-Net Logic"""
+
+class ResidualBlockNew(nn.Module):
+    def __init__(self, in_channels, out_channels, stride=1, shortcut=False):
+        super(ResidualBlockNew, self).__init__()
+
+        self.stride = stride
+        self.shortcut = shortcut
+
+        # First convolution
+        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1)
+        self.bn1 = nn.BatchNorm2d(out_channels)
+        self.relu = nn.ReLU()
+
+        # Second convolution
+        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
+        self.bn2 = nn.BatchNorm2d(out_channels)
+
+        # Shortcut connection
+        if self.shortcut:
+            self.shortcut_pool = nn.AvgPool2d(2, stride=2, ceil_mode=True)
+            self.shortcut_conv = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1, bias=False)
+
+
+    def forward(self, x):
+        identity = x
+
+        # print(f"Identity before: {identity.shape}")
+        # print(f"x before: {x.shape}")
+
+        out = self.relu(self.bn1(self.conv1(x)))
+        out = self.bn2(self.conv2(out))
+
+        #print(f"{self.shortcut}")
+        if self.shortcut:
+            identity = self.shortcut_pool(identity)
+            identity = self.shortcut_conv(identity)
+
+        # print(f"Identity after: {identity.shape}")
+        # print(f"x after(output): {out.shape}")
+        # print()
+
+        out += identity
+        out = self.relu(out)
+        return out
+
+
+class ResNetModule(nn.Module):
+    def __init__(self, in_channels, out_channels, num_blocks, stride=1):
+        super(ResNetModule, self).__init__()
+
+        self.blocks = []
+        for i in range(num_blocks):
+            if i == 0:  # First block requires a shortcut connection
+                self.blocks.append(ResidualBlockNew(in_channels, out_channels, stride=stride, shortcut=True))
+            else:
+                self.blocks.append(ResidualBlockNew(out_channels, out_channels, stride=1, shortcut=False))
+
+        self.blocks = nn.Sequential(*self.blocks)
+
+    def forward(self, x):
+        return self.blocks(x)
+
+
+class ResNetWithAttention(nn.Module):
+    def __init__(self, num_classes=8):
+        super(ResNetWithAttention, self).__init__()
+
+        # Initial convolutional block
+        self.conv1 = nn.Conv2d(1, 32, kernel_size=3, stride=1, padding=1)
+        self.bn1 = nn.BatchNorm2d(32)
+
+        # First submodule with 64 filters
+        self.module1 = ResNetModule(32, 64, num_blocks=2, stride=2)
+
+        # Second submodule with 128 filters
+        self.module2 = ResNetModule(64, 128, num_blocks=2, stride=2)
+
+        # Third submodule with 256 filters
+        self.module3 = ResNetModule(128, 256, num_blocks=2, stride=2)
+
+        # Attention layer (Self-Attention)
+        self.attention = nn.MultiheadAttention(embed_dim=256, num_heads=8, batch_first=True)
+
+        # Final batch normalization and ReLU
+        self.bn2 = nn.BatchNorm2d(256)
+        self.relu = nn.ReLU()
+
+        # Fully connected layers (FC layers)
+        self.fc1 = nn.Linear(256 * (TARGET_FRAMES // 8) * (FREQUENCY_BIN_COUNT // 8), 1024)  # Assuming input size (32x32)
+        self.bn_fc1 = nn.BatchNorm1d(1024)
+
+        self.fc2 = nn.Linear(1024, 512)
+        self.bn_fc2 = nn.BatchNorm1d(512)
+
+        # Output layer (final classification layer)
+        self.fc_out = nn.Linear(512, num_classes)
+
+    def forward(self, x):
+        # Initial convolution
+        x = self.relu(self.bn1(self.conv1(x)))
+
+        # Pass through the modules
+        x = self.module1(x)
+        x = self.module2(x)
+        x = self.module3(x)
+
+        # Apply attention
+        batch_size, channels, height, width = x.size()
+        x = x.view(batch_size, channels, -1).transpose(1, 2)  # Flatten the spatial dimensions
+        x, _ = self.attention(x, x, x)
+        x = x.transpose(1, 2).view(batch_size, channels, height, width)  # Reshape back to 4D
+
+        # Final batch normalization and ReLU activation
+        x = self.relu(self.bn2(x))
+
+        # Flatten for FC layers
+        x = x.reshape(x.size(0), -1)  # Flatten the tensor
+
+        # First FC layer
+        x = self.relu(self.bn_fc1(self.fc1(x)))
+
+        # Second FC layer
+        x = self.relu(self.bn_fc2(self.fc2(x)))
+
+        # Output layer (classification)
+        x = self.fc_out(x)
+
+        return x
+
+
+
+
+
 
