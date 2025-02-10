@@ -1,4 +1,4 @@
-from Models.SentimentAnalysis.models import ResNetWithAttention, RavdessPaperModel
+from models import ResNetWithAttention, RavdessPaperModel
 from audio_dataset import EmotionDataset, RavdessRawData
 from models import SentimentModelHandler
 
