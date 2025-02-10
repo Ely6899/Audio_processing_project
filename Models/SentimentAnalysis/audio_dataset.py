@@ -7,8 +7,8 @@ from torch.utils.data import Dataset
 from pathlib import Path
 from sklearn.preprocessing import LabelEncoder
 
-from Models.SentimentAnalysis.ConstPaths import RavdessPaths
-from Models.SentimentAnalysis.Preprocess import audio_to_mel_spectrogram
+from ConstPaths import RavdessPaths
+from Preprocess import audio_to_mel_spectrogram
 
 class AudioRawData(ABC):
     """

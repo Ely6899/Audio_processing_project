@@ -6,7 +6,7 @@ import pytest
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 
-from Models.SentimentAnalysis.audio_dataset import RavdessRawData
+from audio_dataset import RavdessRawData
 
 index_emotion_mapping = {
     '01': 'neutral',

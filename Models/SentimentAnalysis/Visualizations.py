@@ -4,7 +4,7 @@ import librosa.display
 from matplotlib import pyplot as plt
 import torch
 
-from Models.SentimentAnalysis.ConstPaths import ProjectPaths
+from ConstPaths import ProjectPaths
 
 
 def plot_waveform(waveform, sample_rate):

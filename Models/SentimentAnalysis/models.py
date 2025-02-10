@@ -4,9 +4,9 @@ from torch import optim
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
-from Models.SentimentAnalysis.PreprocessParams import TARGET_FRAMES, FREQUENCY_BIN_COUNT
-from Models.SentimentAnalysis.Visualizations import plot_loss_per_epoch, plot_accuracy_per_epoch
-from Models.SentimentAnalysis.audio_dataset import EmotionDataset
+from PreprocessParams import TARGET_FRAMES, FREQUENCY_BIN_COUNT
+from Visualizations import plot_loss_per_epoch, plot_accuracy_per_epoch
+from audio_dataset import EmotionDataset
 
 
 class SentimentModelHandler:
