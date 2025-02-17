@@ -21,7 +21,7 @@ class SentimentModelHandler:
         self._val_dataset: Dataset = val_dataset
 
         self._batch_size: int = kwargs.get('batch_size', 16)
-        self._lr: float = kwargs.get("learning_rate", 0.001)
+        self._lr: float = kwargs.get("learning_rate", 0.1)
 
         self._train_loader: DataLoader = DataLoader(self._train_dataset, self._batch_size, shuffle=True)
         self._val_loader: DataLoader = DataLoader(self._val_dataset, self._batch_size, shuffle=False)
@@ -30,8 +30,8 @@ class SentimentModelHandler:
         print(f"Class Weights: {self._class_weights}")
 
         self._criterion = kwargs.get("criterion", nn.CrossEntropyLoss)(weight=self._class_weights.to(self._device))
-        #TODO: Consider adaptive LR and change to SGD(Benchmark between Handler instances).
-        self._optimizer = kwargs.get("optimizer", optim.Adam)(self._model.parameters(), lr=self._lr)
+        self._optimizer = kwargs.get("optimizer", optim.SGD)(self._model.parameters(), lr=self._lr, momentum=0.9)
+        self._scheduler = kwargs.get("scheduler", optim.lr_scheduler.MultiStepLR)(self._optimizer, milestones=[int(0.33 * 100), int(0.66 * 100)], gamma=0.1)
 
         self._training_logs: dict = dict()
 
@@ -64,6 +64,8 @@ class SentimentModelHandler:
 
             running_loss += loss.item()
             correct += (output.argmax(1) == label).sum().item()
+
+        self._scheduler.step()
 
         total_samples = len(self._train_loader.dataset)
 
@@ -109,6 +111,7 @@ class SentimentModelHandler:
 
             train_accuracy = (train_correct / train_total) * 100.0
             val_accuracy = (val_correct / val_total) * 100.0
+            current_lr = self._optimizer.param_groups[0]['lr']
 
             epoch_string: str = f"Epoch {epoch + 1}"
             results_string: str = f'Train Loss: {train_loss:.4f},\n' \
@@ -116,7 +119,8 @@ class SentimentModelHandler:
                                   f'[{train_correct}/{train_total}]\n' \
                                   f'Val Loss: {val_loss:.4f},\n' \
                                   f'Val Accuracy: {val_accuracy:.2f}%\n' \
-                                  f'[{val_correct}/{val_total}]'
+                                  f'[{val_correct}/{val_total}]\n' \
+                                  f'LR: {current_lr}'
 
             self._training_logs[epoch_string] = results_string
             self._train_scores.append((train_loss, train_accuracy))

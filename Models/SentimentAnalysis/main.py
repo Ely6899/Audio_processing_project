@@ -26,10 +26,10 @@ if __name__ == '__main__':
     # model_handler_base.plot_losses(file_name="base_losses")
     # model_handler_base.plot_accuracies(file_name="base_accuracies")
 
-    model_handler_with_attention = SentimentModelHandler(ResNetWithAttention(), train_dataset=train_dataset, val_dataset=val_dataset)
-    model_handler_with_attention.train_model(verbose=True)
-    model_handler_with_attention.plot_losses(file_name="emo_net_losses")
-    model_handler_with_attention.plot_accuracies(file_name="emo_net_accuracies")
+    model_handler_with_attention = SentimentModelHandler(ResNetWithAttention(), train_dataset=train_dataset, val_dataset=val_dataset, batch_size=64)
+    model_handler_with_attention.train_model(epochs=100, verbose=True)
+    model_handler_with_attention.plot_losses(file_name="emo_net_losses_100_epochs_scheduler")
+    model_handler_with_attention.plot_accuracies(file_name="emo_net_accuracies_100_epochs_scheduler")
     #model_handler.train_model(10)
 
     # Data loaders

@@ -81,6 +81,7 @@ def plot_accuracy_per_epoch(file_save_name: str, **kwargs):
         plt.xlabel('Epoch')
         plt.ylabel('Accuracy')
         plt.title('Training and Validation Accuracy per Epoch')
+        plt.ylim(0, 100)
         plt.legend()
         plt.grid(True)
         os.makedirs(ProjectPaths.MODEL_RESULTS, exist_ok=True)
