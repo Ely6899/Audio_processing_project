@@ -3,6 +3,7 @@ import os.path
 import librosa.display
 from matplotlib import pyplot as plt
 import torch
+import numpy as np
 
 from ConstPaths import ProjectPaths
 
@@ -32,10 +33,10 @@ def plot_mel_spectrogram(mel_spec, sr):
         mel_spec = mel_spec.squeeze().numpy()  # Remove extra dimensions and convert to NumPy
 
     plt.figure(figsize=(10, 4))
-    librosa.display.specshow(mel_spec, sr=sr, x_axis='off', y_axis='mel', cmap='viridis', fmax=sr//2)
+    librosa.display.specshow(mel_spec, sr=sr, x_axis='off', y_axis='mel', cmap='inferno', fmax=sr//2)
     plt.colorbar(format='%+2.0f dB')
     plt.title('Mel Spectrogram')
-    #plt.xlabel('Time (s)')
+    plt.xlabel('Time (s)')
     plt.ylabel('Frequency (Hz)')
     plt.tight_layout()
     plt.show()

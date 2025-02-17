@@ -3,7 +3,7 @@ SAMPLE_RATE = 16000
 
 N_FFT = 512
 WINDOW_LENGTH = N_FFT
-HOP_LENGTH = WINDOW_LENGTH // 2
+HOP_LENGTH = N_FFT // 4
 MAX_SPECTOGRAM_DURATION_IN_SECONDS = 4.5
 
 #Calculate the max number of samples for the target duration
