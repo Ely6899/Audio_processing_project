@@ -14,3 +14,5 @@ class MeldPaths(EnumType):
 class RavdessPaths(EnumType):
     AUDIO_FILES_DATA = Path(os.path.join("RAVDESS"))
 
+class TessPaths(EnumType):
+    AUDIO_FILES_DATA = Path(os.path.join("TESS"))

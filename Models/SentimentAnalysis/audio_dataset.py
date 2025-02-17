@@ -7,7 +7,7 @@ from torch.utils.data import Dataset
 from pathlib import Path
 from sklearn.preprocessing import LabelEncoder
 
-from ConstPaths import RavdessPaths
+from ConstPaths import RavdessPaths, TessPaths
 from Preprocess import audio_to_mel_spectrogram, audio_to_waveform
 
 class AudioRawData(ABC):
@@ -106,6 +106,46 @@ class RavdessRawData(AudioRawData):
 
         emotion_index = numbers[2]
         emotion = index_emotion_mapping[emotion_index]
+        return emotion
+
+class TessRawData(AudioRawData):
+    def __init__(self):
+        super().__init__(TessPaths.AUDIO_FILES_DATA, {".wav"})
+
+    def _scan_supported_files(self) -> set[Tuple[Path, str]]:
+        """
+        Scans and saves the file paths of the model and a relevant label based on the audio file name.
+        @return: A set of tuples, each tuple holds (file path, label).
+        """
+        files = {
+            file for file in Path(self._data_root).rglob('*')
+            if file.is_file() and any(file.name.endswith(suffix) for suffix in self._supported_formats)
+        }
+
+        result = set(map(lambda x: (x, TessRawData.__get_emotion_from_filename(x)), files))
+        return result
+
+    @staticmethod
+    def __get_emotion_from_filename(filename):
+        """
+        For TESS, label is indicated in the last word in the name(before the file extention). This function handles mapping it to a
+        readable label.
+        @param filename: File path from TESS dataset.
+        @return: Label of the file according to the filename.
+        """
+        # Extract filename without extension
+        stem = filename.stem  # Removes .wav or other extensions
+
+        # Split by underscores or spaces (TESS filenames typically use underscores)
+        words = stem.split("_")
+        
+        # The last word is the emotion label
+        emotion = words[-1]
+        
+        # if the label is ps - return pleasant surprise
+        if words[-1] == "ps":
+            emotion = "pleasant surprise"
+        
         return emotion
 
 class EmotionSpecDataset(Dataset):
