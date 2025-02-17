@@ -22,12 +22,32 @@ class AudioRawData(ABC):
         self._file_paths, self._file_labels = zip(*list(self._data))
         self._train_data, self._val_data, self._test_data = self._train_val_test_split()
 
-    @abstractmethod
-    def _scan_supported_files(self) -> set:
-        pass
+    def _train_val_test_split(self, test_size: float=0.2, val_size: float=0.1, random_state=42) -> Tuple[set, set, set]:
+        """
+        Applies stratified train_val_test split.
+        @param test_size: Percentage of test size.
+        @param val_size: Percentage of val size.
+        @param random_state: Put a specific number to ensure determinism.
+        @return: Three sets of Train, Val, Test.
+        """
+        train_paths, temp_paths, train_labels, temp_labels = train_test_split(
+            self._file_paths, self._file_labels, test_size=0.2, stratify=self._file_labels, random_state=random_state
+        )
+
+        # Validation + Test split (50% val, 50% test from temp, making each 10% of total)
+        val_paths, test_paths, val_labels, test_labels = train_test_split(
+            temp_paths, temp_labels, test_size=0.5, stratify=temp_labels, random_state=random_state
+        )
+
+        # Convert back to sets
+        train_set = set(zip(train_paths, train_labels))
+        val_set = set(zip(val_paths, val_labels))
+        test_set = set(zip(test_paths, test_labels))
+
+        return train_set, val_set, test_set
 
     @abstractmethod
-    def _train_val_test_split(self, test_size=0.2, val_size=0.1, random_state=None)-> Tuple[set, set, set]:
+    def _scan_supported_files(self) -> set:
         pass
 
     @property
@@ -62,31 +82,6 @@ class RavdessRawData(AudioRawData):
 
         result = set(map(lambda x: (x, RavdessRawData.__get_emotion_from_index(x)), files))
         return result
-
-    def _train_val_test_split(self, test_size: float=0.2, val_size: float=0.1, random_state=42) -> Tuple[set, set, set]:
-        """
-        Applies stratified train_val_test split.
-        @param test_size: Percentage of test size.
-        @param val_size: Percentage of val size.
-        @param random_state: Put a specific number to ensure determinism.
-        @return: Three sets of Train, Val, Test.
-        """
-        train_paths, temp_paths, train_labels, temp_labels = train_test_split(
-            self._file_paths, self._file_labels, test_size=0.2, stratify=self._file_labels, random_state=random_state
-        )
-
-        # Validation + Test split (50% val, 50% test from temp, making each 10% of total)
-        val_paths, test_paths, val_labels, test_labels = train_test_split(
-            temp_paths, temp_labels, test_size=0.5, stratify=temp_labels, random_state=random_state
-        )
-
-        # Convert back to sets
-        train_set = set(zip(train_paths, train_labels))
-        val_set = set(zip(val_paths, val_labels))
-        test_set = set(zip(test_paths, test_labels))
-
-        return train_set, val_set, test_set
-
 
     @staticmethod
     def __get_emotion_from_index(filename):
