@@ -5,9 +5,9 @@ import soundfile as sf
 import numpy as np
 from matplotlib import pyplot as plt
 
-from Models.SentimentAnalysis.Preprocess import audio_to_mel_spectrogram, audio_to_waveform
-from Models.SentimentAnalysis.PreprocessParams import SAMPLE_RATE, HOP_LENGTH
-from Models.SentimentAnalysis.Visualizations import plot_mel_spectrogram, plot_waveform
+from Preprocess import audio_to_mel_spectrogram, audio_to_waveform
+from PreprocessParams import SAMPLE_RATE, HOP_LENGTH
+from Visualizations import plot_mel_spectrogram, plot_waveform
 from models import ResNetWithAttention, RavdessPaperModel
 from audio_dataset import EmotionSpecDataset, EmotionWaveDataset, RavdessRawData
 from models import SentimentModelHandler
