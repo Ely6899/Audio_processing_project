@@ -20,4 +20,9 @@ __pycache__/
 
 # Ignore system files
 .DS_Store
+
+# model training results
 Model Results/
+
+# dataset folders
+RAVDESS
