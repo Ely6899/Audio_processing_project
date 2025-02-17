@@ -63,7 +63,7 @@ class RavdessRawData(AudioRawData):
         result = set(map(lambda x: (x, RavdessRawData.__get_emotion_from_index(x)), files))
         return result
 
-    def _train_val_test_split(self, test_size: float=0.2, val_size: float=0.1, random_state=None) -> Tuple[set, set, set]:
+    def _train_val_test_split(self, test_size: float=0.2, val_size: float=0.1, random_state=42) -> Tuple[set, set, set]:
         """
         Applies stratified train_val_test split.
         @param test_size: Percentage of test size.
@@ -72,12 +72,12 @@ class RavdessRawData(AudioRawData):
         @return: Three sets of Train, Val, Test.
         """
         train_paths, temp_paths, train_labels, temp_labels = train_test_split(
-            self._file_paths, self._file_labels, test_size=0.2, stratify=self._file_labels, random_state=42
+            self._file_paths, self._file_labels, test_size=0.2, stratify=self._file_labels, random_state=random_state
         )
 
         # Validation + Test split (50% val, 50% test from temp, making each 10% of total)
         val_paths, test_paths, val_labels, test_labels = train_test_split(
-            temp_paths, temp_labels, test_size=0.5, stratify=temp_labels, random_state=42
+            temp_paths, temp_labels, test_size=0.5, stratify=temp_labels, random_state=random_state
         )
 
         # Convert back to sets
