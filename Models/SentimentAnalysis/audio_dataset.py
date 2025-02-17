@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Tuple, Iterable
+from typing import Tuple, Iterable, Any
 import re
 import torch
 from sklearn.model_selection import train_test_split
@@ -17,7 +17,7 @@ class AudioRawData(ABC):
     def __init__(self, data_root: Path, supported_formats: set[str]):
         self._data_root: Path = data_root
         self._supported_formats: set[str] = supported_formats
-        self._data: set[Iterable] = self._scan_supported_files()
+        self._data: set[Tuple[Path, Any]] = self._scan_supported_files() # Path, Label
 
         self._file_paths, self._file_labels = zip(*list(self._data))
         self._train_data, self._val_data, self._test_data = self._train_val_test_split()
