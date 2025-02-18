@@ -30,6 +30,11 @@ if __name__ == '__main__':
     
     # train the model:
     handler.train_model()
+    
+    # save the results in a plot:
+    handler.plot_accuracies("ResNetWithAttention after 2 db - ACC")
+    handler.plot_losses("ResNetWithAttention after 2 db - LOSS")
+    
     # S_dB_np = mel_spectogram.cpu().numpy()
     # # Invert mel spectrogram to get the magnitude spectrogram
     # S_inv = librosa.db_to_power(S_dB_np)  # Convert back to power spectrogram
