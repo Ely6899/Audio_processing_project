@@ -169,7 +169,15 @@ class EmotionSpecDataset(Dataset):
         file_path = self._paths[idx]
         label = self._labels[idx]
 
+        # noam: audio_to_mel_spectrogram returns shape (freq_bins, time_frames)
         mel_spectrogram = audio_to_mel_spectrogram(file_path=file_path)
+
+        # Convert to torch.Tensor
+        mel_spectrogram = torch.from_numpy(mel_spectrogram).float()
+        
+        # Now expand to shape (1, freq_bins, time_frames)
+        mel_spectrogram = mel_spectrogram.unsqueeze(dim=0)
+        
         label = label.long()
 
         return mel_spectrogram, label
