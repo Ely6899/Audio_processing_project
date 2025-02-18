@@ -15,16 +15,21 @@ from pprint import pprint
 
 
 if __name__ == '__main__':
-    #ravdess_raw_data = RavdessRawData()
+    ravdess_raw_data = RavdessRawData()
+    # pprint(ravdess_raw_data.all_data)
+
+    # create the dataset with the preprocessing logic:
+    train = EmotionSpecDataset(ravdess_raw_data.train_data)
+    val = EmotionSpecDataset(ravdess_raw_data.val_data)
     
-    # pprint(list(ravdess_raw_data.all_data)[:5])
-    # print(type(ravdess_raw_data.all_data))
-
-
-    file_path = Path("RAVDESS/Actor_01/03-01-06-02-01-02-01.wav")
-    waveform, sample_rate = audio_to_waveform(file_path)
-    mel_spectogram = audio_to_mel_spectrogram(file_path)
-
+    # create the model:
+    model = ResNetWithAttention()
+    
+    # create the handler:
+    handler = SentimentModelHandler(model, train, val)
+    
+    # train the model:
+    handler.train_model()
     # S_dB_np = mel_spectogram.cpu().numpy()
     # # Invert mel spectrogram to get the magnitude spectrogram
     # S_inv = librosa.db_to_power(S_dB_np)  # Convert back to power spectrogram
@@ -40,7 +45,7 @@ if __name__ == '__main__':
     # # Save the reconstructed audio to a file
     # sf.write('reconstructed_audio_old_algo.wav', y_reconstructed, 16000)
 
-    plot_mel_spectrogram(mel_spectogram, sample_rate)
+    # plot_mel_spectrogram(mel_spectogram, sample_rate)
     #plot_waveform(waveform, SAMPLE_RATE)
     
     # Load datasets
