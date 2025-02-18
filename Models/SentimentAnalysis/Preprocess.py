@@ -97,7 +97,8 @@ def pad_spectrogram_to_max_duration(spectrogram, max_duration_seconds, sample_ra
         torch.Tensor: Padded spectrogram with consistent frame count.
     """
 
-    target_frames = int(np.ceil(sample_rate * max_duration_seconds / hop_length))
+    max_sumples = int(max_duration_seconds * sample_rate)
+    target_frames = (max_sumples - win_length) // hop_length + 1
 
     if spectrogram.shape[1] > target_frames: # Truncate
         logger.debug("Applied truncation")
