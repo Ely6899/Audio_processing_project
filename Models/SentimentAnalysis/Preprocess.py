@@ -69,7 +69,7 @@ def audio_to_mel_spectrogram(file_path: Path,
                                                      center=False)
 
     if padding:
-        mel_spectrogram = pad_spectrogram_to_max_duration(spectrogram=mel_spectrogram,
+        mel_spectrogram = resize_spectrogram_to_max_duration(spectrogram=mel_spectrogram,
                                                                  max_duration_seconds=max_length_in_seconds,
                                                                  sample_rate=sample_rate,
                                                                  win_length=window_length,
@@ -82,9 +82,9 @@ def audio_to_mel_spectrogram(file_path: Path,
     return mel_spectrogram
 
 
-def pad_spectrogram_to_max_duration(spectrogram, max_duration_seconds, sample_rate, win_length, hop_length):
+def resize_spectrogram_to_max_duration(spectrogram, max_duration_seconds, sample_rate, win_length, hop_length):
     """
-    Pads a spectrogram to match the maximum duration in seconds.
+    Pads or truncates a spectrogram to match the maximum duration in seconds.
 
     Args:
         spectrogram (torch.Tensor): Input spectrogram (shape: [channels, n_mels, n_frames]).
@@ -94,9 +94,10 @@ def pad_spectrogram_to_max_duration(spectrogram, max_duration_seconds, sample_ra
         hop_length (int): Hop size used in the STFT.
 
     Returns:
-        torch.Tensor: Padded spectrogram with consistent frame count.
+        torch.Tensor: Padded spectrogram with the frame count to achive the asked duration.
     """
 
+    # compute the target number of frames
     max_sumples = int(max_duration_seconds * sample_rate)
     target_frames = (max_sumples - win_length) // hop_length + 1
 
