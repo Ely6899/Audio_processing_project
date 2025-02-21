@@ -1,3 +1,4 @@
+from collections import Counter as LabelCounter
 from abc import ABC, abstractmethod
 from typing import Tuple, Iterable, Any
 import re
@@ -65,6 +66,32 @@ class AudioRawData(ABC):
     @property
     def test_data(self) -> set:
         return self._test_data
+
+    def labels_count_total(self) -> dict:
+        counter: dict = dict(LabelCounter(self._file_labels))
+        return counter
+
+    def labels_count_train(self) -> dict:
+        _, train_labels = zip(*list(self._train_data))
+        counter: dict = dict(LabelCounter(train_labels))
+        return counter
+
+    def labels_count_val(self) -> dict:
+        _, val_labels = zip(*list(self._val_data))
+        counter: dict = dict(LabelCounter(val_labels))
+        return counter
+
+    def labels_count_test(self) -> dict:
+        _, test_labels = zip(*list(self._test_data))
+        counter: dict = dict(LabelCounter(test_labels))
+        return counter
+
+    def print_all_label_counts(self) -> None:
+        print(f"Total label counts: {self.labels_count_total()}")
+        print(f"Train label counts: {self.labels_count_train()}")
+        print(f"Val label counts: {self.labels_count_val()}")
+        print(f"Test label counts: {self.labels_count_test()}")
+
 
 class RavdessRawData(AudioRawData):
     def __init__(self):

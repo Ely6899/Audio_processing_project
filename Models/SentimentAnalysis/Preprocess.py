@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Callable
 
 import librosa
 import numpy as np
@@ -22,6 +23,24 @@ formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(messag
 console_handler.setFormatter(formatter)
 # logger.addHandler(console_handler)
 
+def min_max_normalization(spectrogram: np.ndarray) -> np.ndarray:
+    """
+    Scales the spectrogram values between 0 and 1.
+    """
+    return (spectrogram - spectrogram.min()) / (spectrogram.max() - spectrogram.min())
+
+def standardization(spectrogram: np.ndarray) -> np.ndarray:
+    """
+    Standardizes the spectrogram to have zero mean and unit variance.
+    """
+    return (spectrogram - spectrogram.mean()) / spectrogram.std()
+
+def scale_between_minus_one_and_one(spectrogram: np.ndarray) -> np.ndarray:
+    """
+    Scales the spectrogram values between -1 and 1.
+    """
+    return 2 * (spectrogram - spectrogram.min()) / (spectrogram.max() - spectrogram.min()) - 1
+
 
 def audio_to_waveform(file_path: Path, target_sample_rate: int = SAMPLE_RATE):
     """
@@ -43,16 +62,19 @@ def audio_to_mel_spectrogram(file_path: Path,
                             hop_length = HOP_LENGTH,
                             n_mels: int = FREQUENCY_BIN_COUNT,
                             max_length_in_seconds: float = MAX_SPECTOGRAM_DURATION_IN_SECONDS,
-                            padding = True):
+                            padding = True,
+                            normalization_fn: Callable[[np.ndarray], np.ndarray] = standardization):
     """
     Given audio file path, extracts its waveform and from it creates a mel-spectrogram.
+    @param padding: True if you wish to apply padding to a fixed length.
     @param file_path: Audio file path.
     @param sample_rate: Desired sample rate.
     @param n_fft: Number of fft values. Defaults to the N_FFT preprocess macro.
     @param window_length: Spectrogram window length. Defaults to WINDOW_LENGTH marco.
     @param hop_length: Hop length in frames for spectrogram.
     @param n_mels: Number of frequency bins for the spectrogram. Defaults to FREQUENCY_BIN_COUNT macro.
-    @param max_length_in_seconds: Limit on the length of spectrogram in seconds. Defaults to MAX_SPECTOGRAM_DURATION_IN_SECONDS
+    @param max_length_in_seconds: Limit on the length of spectrogram in seconds. Defaults to MAX_SPECTROGRAM_DURATION_IN_SECONDS
+    @param normalization_fn: Function that normalizes the spectrogram. Defaults to standardization.
     @return: Mel-spectrogram with the desired attributes.
     """
     waveform, sample_rate = audio_to_waveform(file_path, sample_rate)
@@ -66,7 +88,8 @@ def audio_to_mel_spectrogram(file_path: Path,
                                                      win_length = window_length,
                                                      hop_length = hop_length,
                                                      power=2.0,
-                                                     center=False)
+                                                     center=False,
+                                                     )
 
     if padding:
         mel_spectrogram = resize_spectrogram_to_max_duration(spectrogram=mel_spectrogram,
@@ -78,6 +101,9 @@ def audio_to_mel_spectrogram(file_path: Path,
     logger.debug(f"Spectrogram shape at return: {mel_spectrogram.shape}")
 
     mel_spectrogram = librosa.power_to_db(mel_spectrogram, ref=np.max)
+
+    #min-max normalization.
+    mel_spectrogram = normalization_fn(mel_spectrogram)
 
     return mel_spectrogram
 
@@ -94,7 +120,7 @@ def resize_spectrogram_to_max_duration(spectrogram, max_duration_seconds, sample
         hop_length (int): Hop size used in the STFT.
 
     Returns:
-        torch.Tensor: Padded spectrogram with the frame count to achive the asked duration.
+        torch.Tensor: Padded spectrogram with the frame count to achieve the asked duration.
     """
 
     # compute the target number of frames

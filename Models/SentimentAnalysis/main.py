@@ -5,6 +5,8 @@ import soundfile as sf
 import numpy as np
 from matplotlib import pyplot as plt
 
+from Models.SentimentAnalysis.Preprocess import scale_between_minus_one_and_one, min_max_normalization
+from Models.SentimentAnalysis.models import ResidualModel
 from Preprocess import audio_to_mel_spectrogram, audio_to_waveform
 from PreprocessParams import SAMPLE_RATE, HOP_LENGTH
 from Visualizations import plot_mel_spectrogram, plot_waveform
@@ -21,19 +23,36 @@ if __name__ == '__main__':
     # create the dataset with the preprocessing logic:
     train = EmotionSpecDataset(ravdess_raw_data.train_data)
     val = EmotionSpecDataset(ravdess_raw_data.val_data)
-    
+
+
+    #For testing pre-processing spectrogram
+    #mel_spectrogram = audio_to_mel_spectrogram(Path("RAVDESS/Actor_01/03-01-02-02-02-02-01.wav"), normalization_fn=min_max_normalization)
+    #plot_mel_spectrogram(mel_spectrogram, SAMPLE_RATE)
+
+
     # create the model:
-    model = ResNetWithAttention()
-    
-    # create the handler:
-    handler = SentimentModelHandler(model, train, val)
-    
+    # model_paper = ResNetWithAttention()
+
+    #
+    # # create the handler:
+    # handler_paper = SentimentModelHandler(model_paper, train, val)
+    #
+    # # train the model:
+    # handler_paper.train_model(epochs = 100, verbose=True)
+    #
+    # # save the results in a plot:
+    # handler_paper.plot_accuracies("PaperModel-ACC-fixed")
+    # handler_paper.plot_losses("PaperModel-LOSS-fixed")
+
+    model_resnet = ResidualModel()
+    handler_resnet = SentimentModelHandler(model_resnet, train, val)
+
     # train the model:
-    handler.train_model()
-    
-    # save the results in a plot:
-    handler.plot_accuracies("ResNetWithAttention after 2 db - ACC")
-    handler.plot_losses("ResNetWithAttention after 2 db - LOSS")
+    handler_resnet.train_model(epochs=100, verbose=True)
+    #
+    # # save the results in a plot:
+    handler_resnet.plot_accuracies("ResnetModel-ACC-fixed")
+    handler_resnet.plot_losses("ResnetModel-LOSS-fixed")
     
     # S_dB_np = mel_spectogram.cpu().numpy()
     # # Invert mel spectrogram to get the magnitude spectrogram
