@@ -30,7 +30,7 @@ class SentimentModelHandler:
         print(f"Class Weights: {self._class_weights}")
 
         self._criterion = kwargs.get("criterion", nn.CrossEntropyLoss)(weight=self._class_weights.to(self._device))
-        self._optimizer = kwargs.get("optimizer", optim.SGD)(self._model.parameters(), lr=self._lr, momentum=0.9)
+        self._optimizer = kwargs.get("optimizer", optim.SGD)(self._model.parameters(), lr=self._lr, momentum=0.9, weight_decay=1e-6)
         self._scheduler = kwargs.get("scheduler", optim.lr_scheduler.MultiStepLR)(self._optimizer, milestones=[int(0.33 * 100), int(0.66 * 100)], gamma=0.1)
 
         self._training_logs: dict = dict()
@@ -58,6 +58,8 @@ class SentimentModelHandler:
 
             self._optimizer.zero_grad()
             output = self._model(mel_spec)
+            #print("Output sample:", output[0].detach().cpu().numpy())
+            #print("Label sample:", label[0].item())
             loss = self._criterion(output, label)
             loss.backward()
             self._optimizer.step()
@@ -69,7 +71,7 @@ class SentimentModelHandler:
 
         total_samples = len(self._train_loader.dataset)
 
-        return running_loss / len(self._train_loader), correct, total_samples
+        return running_loss / total_samples, correct, total_samples
 
     def __validate(self):
         """
@@ -94,7 +96,7 @@ class SentimentModelHandler:
                 correct += (output.argmax(1) == label).sum().item()
 
         total_samples = len(self._val_loader.dataset)
-        return running_loss / len(self._val_loader), correct, total_samples
+        return running_loss / total_samples, correct, total_samples
 
     def train_model(self, epochs: int = 10, verbose: bool = False):
         """
@@ -401,6 +403,8 @@ class ResidualBlock(nn.Module):
         out += identity
         return torch.relu(out)
 
+
+#NOTE: Too slow for unknown reason.
 class ResidualModel(nn.Module):
     def __init__(self):
         super(ResidualModel, self).__init__()
@@ -414,7 +418,6 @@ class ResidualModel(nn.Module):
         self.flatten = nn.Flatten()
         self.fc1 = nn.Linear(64 * TARGET_FRAMES * FREQUENCY_BIN_COUNT, 128)  # Assuming 8x8 feature maps after Conv layers
         self.fc2 = nn.Linear(128, 64)
-        #TODO: Add dropout between FC layers.
 
         self.output_layer = nn.Linear(64, 8)
 
@@ -428,6 +431,8 @@ class ResidualModel(nn.Module):
         x = torch.relu(self.fc1(x))
         x = torch.relu(self.fc2(x))
         return self.output_layer(x)
+
+
 
 """Emo-Net Logic"""
 

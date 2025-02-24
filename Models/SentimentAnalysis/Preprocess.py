@@ -102,7 +102,6 @@ def audio_to_mel_spectrogram(file_path: Path,
 
     mel_spectrogram = librosa.power_to_db(mel_spectrogram, ref=np.max)
 
-    #min-max normalization.
     mel_spectrogram = normalization_fn(mel_spectrogram)
 
     return mel_spectrogram
