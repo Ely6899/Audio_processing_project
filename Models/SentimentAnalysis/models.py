@@ -5,6 +5,7 @@ from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 import torch.nn.functional as F
 
+from Models.SentimentAnalysis.Visualizations import plot_confusion_matrix
 from PreprocessParams import TARGET_FRAMES, FREQUENCY_BIN_COUNT
 from Visualizations import plot_loss_per_epoch, plot_accuracy_per_epoch
 from audio_dataset import EmotionSpecDataset
@@ -17,8 +18,11 @@ class SentimentModelHandler:
     def __init__(self, model: nn.Module, train_dataset: EmotionSpecDataset, val_dataset: EmotionSpecDataset, **kwargs):
         self._device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self._model: nn.Module = model
-        self._train_dataset: Dataset = train_dataset
-        self._val_dataset: Dataset = val_dataset
+        self._train_dataset: EmotionSpecDataset = train_dataset
+        self._val_dataset: EmotionSpecDataset = val_dataset
+
+        self._train_class_names = self._train_dataset.class_names
+        self._val_class_names = self._val_dataset.class_names
 
         self._batch_size: int = kwargs.get('batch_size', 16)
         self._lr: float = kwargs.get("learning_rate", 0.1)
@@ -27,7 +31,7 @@ class SentimentModelHandler:
         self._val_loader: DataLoader = DataLoader(self._val_dataset, self._batch_size, shuffle=False)
 
         self._class_weights = train_dataset.class_weights
-        print(f"Class Weights: {self._class_weights}")
+        print(f"Training set class Weights: {self._class_weights}")
 
         self._criterion = kwargs.get("criterion", nn.CrossEntropyLoss)(weight=self._class_weights.to(self._device))
         self._optimizer = kwargs.get("optimizer", optim.SGD)(self._model.parameters(), lr=self._lr, momentum=0.9, weight_decay=1e-6)
@@ -39,9 +43,9 @@ class SentimentModelHandler:
         self._train_scores: list[tuple[float, float]] = []
         self._val_scores: list[tuple[float, float]] = []
 
-        # New lists to store the true labels and predicted labels for confusion matrix
-        self._true_labels = []
-        self._pred_labels = []
+        # New lists to store the true labels and predicted labels for confusion matrix(Of both train and validation).
+        self._true_labels_train, self._true_labels_val = [], []
+        self._pred_labels_train, self._pred_labels_val = [], []
 
 
     def __train_one_epoch(self):
@@ -49,6 +53,9 @@ class SentimentModelHandler:
         Trains a single epoch across a dataloader.
         @return: Loss average across batches, number of correct classifications and total samples.
         """
+        self._true_labels_train.clear()
+        self._pred_labels_train.clear()
+
         self._model.train()
         running_loss = 0.0
         correct = 0
@@ -65,7 +72,12 @@ class SentimentModelHandler:
             self._optimizer.step()
 
             running_loss += loss.item()
-            correct += (output.argmax(1) == label).sum().item()
+
+            predictions = output.argmax(1)
+            correct += (predictions == label).sum().item()
+
+            self._true_labels_train.extend(label.cpu().numpy())
+            self._pred_labels_train.extend(predictions.cpu().numpy())
 
         self._scheduler.step()
 
@@ -78,13 +90,13 @@ class SentimentModelHandler:
         Validates a single epoch across a dataloader.
         @return: Loss average across batches, number of correct classifications and total samples.
         """
+        self._true_labels_val.clear()
+        self._pred_labels_val.clear()
+
         self._model.eval()
         running_loss = 0.0
         correct = 0
 
-        # Clear true and predicted labels at the start of validation
-        self._true_labels.clear()
-        self._pred_labels.clear()
 
         with torch.no_grad():
             for mel_spec, label in tqdm(self._val_loader, desc="Model validation"):
@@ -93,7 +105,12 @@ class SentimentModelHandler:
                 loss = self._criterion(output, label)
 
                 running_loss += loss.item()
-                correct += (output.argmax(1) == label).sum().item()
+
+                predictions = output.argmax(1)
+                correct += (predictions == label).sum().item()
+
+                self._true_labels_train.extend(label.cpu().numpy())
+                self._pred_labels_train.extend(predictions.cpu().numpy())
 
         total_samples = len(self._val_loader.dataset)
         return running_loss / total_samples, correct, total_samples
@@ -155,6 +172,14 @@ class SentimentModelHandler:
         plot_accuracy_per_epoch(file_save_name=file_name,
                             training_accuracy=train_accuracies,
                             validation_accuracy=val_accuracies)
+
+    def plot_confusion_matrix(self, file_name: str | None = None):
+        file_name = f"{self._model.__class__.__name__}_confusion_matrix" if None else file_name
+        train_confusion_data = (self._true_labels_train, self._pred_labels_train, self._train_class_names)
+        val_confusion_data = (self._true_labels_val, self._pred_labels_val, self._val_class_names)
+        plot_confusion_matrix(file_save_name=file_name,
+                              train_label_data=train_confusion_data,
+                              val_label_data=val_confusion_data)
 
 
 
@@ -536,7 +561,7 @@ class ResNetWithAttention(nn.Module):
         # Initial convolution
         x = self.relu(self.bn1(self.conv1(x)))
 
-        # Pass through the modules
+        # Pass through the residual modules
         x = self.module1(x)
         x = self.module2(x)
         x = self.module3(x)

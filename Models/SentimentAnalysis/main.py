@@ -5,7 +5,7 @@ import soundfile as sf
 import numpy as np
 from matplotlib import pyplot as plt
 
-from Models.SentimentAnalysis.Preprocess import scale_between_minus_one_and_one, min_max_normalization
+from Models.SentimentAnalysis.Preprocess import scale_between_minus_one_and_one, min_max_normalization, standardization
 from Models.SentimentAnalysis.models import ResidualModel, EmotionClassifier2
 from Preprocess import audio_to_mel_spectrogram, audio_to_waveform
 from PreprocessParams import SAMPLE_RATE, HOP_LENGTH
@@ -26,7 +26,7 @@ if __name__ == '__main__':
 
 
     #For testing pre-processing spectrogram
-    #mel_spectrogram = audio_to_mel_spectrogram(Path("RAVDESS/Actor_01/03-01-02-02-02-02-01.wav"), normalization_fn=min_max_normalization)
+    #mel_spectrogram = audio_to_mel_spectrogram(Path("RAVDESS/Actor_01/03-01-02-02-02-02-01.wav"), normalization_fn=standardization)
     #plot_mel_spectrogram(mel_spectrogram, SAMPLE_RATE)
 
 
@@ -38,11 +38,12 @@ if __name__ == '__main__':
     handler_paper = SentimentModelHandler(model_paper, train, val, batch_size=32, learning_rate=0.001)
     #
     # # train the model:
-    handler_paper.train_model(epochs = 100, verbose=True)
+    handler_paper.train_model(epochs = 20, verbose=True)
     #
     # # save the results in a plot:
     handler_paper.plot_accuracies("PaperModel-ACC-fixed")
     handler_paper.plot_losses("PaperModel-LOSS-fixed")
+    handler_paper.plot_confusion_matrix("PaperModel-Confusion-Matrix")
 
     #model_resnet = EmotionClassifier2()
     #handler_resnet = SentimentModelHandler(model_resnet, train, val, batch_size=16)

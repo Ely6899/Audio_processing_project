@@ -182,6 +182,7 @@ class EmotionSpecDataset(Dataset):
 
         self.__label_encoder = LabelEncoder()
         self._labels = torch.tensor(self.__label_encoder.fit_transform(self._labels))
+        self._class_names = list(self.__label_encoder.classes_)
 
         # Get the number of classes
         self.num_classes = len(self.__label_encoder.classes_)
@@ -208,6 +209,10 @@ class EmotionSpecDataset(Dataset):
         label = label.long()
 
         return mel_spectrogram, label
+
+    @property
+    def class_names(self):
+        return self._class_names
 
     def decode_label(self, encoded_label):
         return self.__label_encoder.inverse_transform([encoded_label])[0]

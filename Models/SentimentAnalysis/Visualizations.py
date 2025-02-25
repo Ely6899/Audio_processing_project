@@ -1,10 +1,12 @@
 import os.path
+from typing import Tuple, Optional
 
 import librosa.display
 from matplotlib import pyplot as plt
 import torch
 import numpy as np
-
+from sklearn.metrics import confusion_matrix
+import seaborn as sns
 from ConstPaths import ProjectPaths
 
 
@@ -88,33 +90,45 @@ def plot_accuracy_per_epoch(file_save_name: str, **kwargs):
         os.makedirs(ProjectPaths.MODEL_RESULTS, exist_ok=True)
         plt.savefig(os.path.join(ProjectPaths.MODEL_RESULTS, f"{file_save_name}.png"))
 
+def plot_confusion_matrix(file_save_name: str, **kwargs):
+    train_values_data: Optional[Tuple[list, list, list]]= kwargs.get("train_label_data")
+    val_values_data: Optional[Tuple[list, list, list]] = kwargs.get("val_label_data")
 
-# def plot_confusion_matrix(model, dataloader, device):
-#     # Set the model to evaluation mode
-#     model.eval()
-#
-#     all_labels = []
-#     all_preds = []
-#
-#     with torch.no_grad():
-#         for inputs, labels in dataloader:
-#             inputs, labels = inputs.to(device), labels.to(device)
-#
-#             # Get model predictions
-#             outputs = model(inputs)
-#             _, preds = torch.max(outputs, 1)
-#
-#             all_labels.extend(labels.cpu().numpy())
-#             all_preds.extend(preds.cpu().numpy())
-#
-#     # Compute confusion matrix
-#     cm = confusion_matrix(all_labels, all_preds)
-#
-#     # Plot confusion matrix using seaborn heatmap
-#     plt.figure(figsize=(8, 6))
-#     sns.heatmap(cm, annot=True, fmt='g', cmap='Blues', xticklabels=np.unique(all_labels),
-#                 yticklabels=np.unique(all_labels))
-#     plt.xlabel('Predicted')
-#     plt.ylabel('True')
-#     plt.title('Confusion Matrix')
-#     plt.show()
+    if not train_values_data and not val_values_data:
+        print("No data provided for confusion matrices")
+
+    conf_matrices = []
+    titles = []
+    data_classes = []
+
+    if train_values_data:
+        train_truth_labels, train_pred_labels, train_classes = train_values_data
+        conf_matrices.append(confusion_matrix(train_truth_labels, train_pred_labels))
+        titles.append("Train Confusion Matrix")
+        data_classes.append(train_classes)
+
+    if val_values_data:
+        val_truth_labels, val_pred_labels, val_classes = val_values_data
+        conf_matrices.append(confusion_matrix(val_truth_labels, val_pred_labels))
+        titles.append("Validation Confusion Matrix")
+        data_classes.append(val_classes)
+
+    fig, axes = plt.subplots(1, len(conf_matrices), figsize=(6 * len(conf_matrices), 5))
+
+    # If only one confusion matrix, turn variable to iterable.
+    if len(conf_matrices) == 1:
+        axes = [axes]
+
+    for ax, conf_matrix, title, class_names in zip(axes, conf_matrices, titles, data_classes):
+        sns.heatmap(conf_matrix,
+                    annot=True,
+                    fmt="d",
+                    cmap="Blues" if "Train" in title else "Oranges",
+                    xticklabels=class_names,
+                    yticklabels=class_names,
+                    ax=ax)
+        ax.set_title(titles)
+        ax.set_xlabel("Predicted Label")
+        ax.set_ylabel("True Label")
+
+    plt.savefig(file_save_name)
