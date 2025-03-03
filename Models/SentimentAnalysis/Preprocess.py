@@ -62,11 +62,11 @@ def audio_to_mel_spectrogram(file_path: Path,
                             hop_length = HOP_LENGTH,
                             n_mels: int = FREQUENCY_BIN_COUNT,
                             max_length_in_seconds: float = MAX_SPECTOGRAM_DURATION_IN_SECONDS,
-                            padding = True,
+                            resizing = True,
                             normalization_fn: Callable[[np.ndarray], np.ndarray] = standardization):
     """
     Given audio file path, extracts its waveform and from it creates a mel-spectrogram.
-    @param padding: True if you wish to apply padding to a fixed length.
+    @param resizing: True if you wish to resize the spectrogram to a fixed length.
     @param file_path: Audio file path.
     @param sample_rate: Desired sample rate.
     @param n_fft: Number of fft values. Defaults to the N_FFT preprocess macro.
@@ -91,7 +91,7 @@ def audio_to_mel_spectrogram(file_path: Path,
                                                      center=False,
                                                      )
 
-    if padding:
+    if resizing:
         mel_spectrogram = resize_spectrogram_to_max_duration(spectrogram=mel_spectrogram,
                                                                  max_duration_seconds=max_length_in_seconds,
                                                                  sample_rate=sample_rate,
