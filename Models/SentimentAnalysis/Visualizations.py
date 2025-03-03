@@ -103,17 +103,20 @@ def plot_confusion_matrix(file_save_name: str, **kwargs):
 
     if train_values_data:
         train_truth_labels, train_pred_labels, train_classes = train_values_data
-        conf_matrices.append(confusion_matrix(train_truth_labels, train_pred_labels))
+        assert len(train_truth_labels) > 0 and len(train_pred_labels) > 0, "train_truth_labels or train_pred_labels is empty!"
+        conf_matrices.append(confusion_matrix(np.array(train_truth_labels).flatten(), np.array(train_pred_labels).flatten()))
         titles.append("Train Confusion Matrix")
         data_classes.append(train_classes)
 
     if val_values_data:
         val_truth_labels, val_pred_labels, val_classes = val_values_data
-        conf_matrices.append(confusion_matrix(val_truth_labels, val_pred_labels))
+        assert len(val_truth_labels) > 0 and len(val_truth_labels) > 0, "val_truth_labels or val_pred_labels is empty!"
+
+        conf_matrices.append(confusion_matrix(np.array(val_truth_labels).flatten(), np.array(val_pred_labels).flatten()))
         titles.append("Validation Confusion Matrix")
         data_classes.append(val_classes)
 
-    fig, axes = plt.subplots(1, len(conf_matrices), figsize=(6 * len(conf_matrices), 5))
+    fig, axes = plt.subplots(1, len(conf_matrices), figsize=(7 * len(conf_matrices), 10))
 
     # If only one confusion matrix, turn variable to iterable.
     if len(conf_matrices) == 1:
@@ -127,8 +130,10 @@ def plot_confusion_matrix(file_save_name: str, **kwargs):
                     xticklabels=class_names,
                     yticklabels=class_names,
                     ax=ax)
-        ax.set_title(titles)
+        ax.set_title(title)
         ax.set_xlabel("Predicted Label")
         ax.set_ylabel("True Label")
 
-    plt.savefig(file_save_name)
+    plt.tight_layout()
+
+    plt.savefig(os.path.join(ProjectPaths.MODEL_RESULTS, f"{file_save_name}.png"))

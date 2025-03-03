@@ -1,20 +1,6 @@
-from pathlib import Path
-
-import librosa
-import soundfile as sf
-import numpy as np
-from matplotlib import pyplot as plt
-
-from Models.SentimentAnalysis.Preprocess import scale_between_minus_one_and_one, min_max_normalization, standardization
-from Models.SentimentAnalysis.models import ResidualModel, EmotionClassifier2
-from Preprocess import audio_to_mel_spectrogram, audio_to_waveform
-from PreprocessParams import SAMPLE_RATE, HOP_LENGTH
-from Visualizations import plot_mel_spectrogram, plot_waveform
-from models import ResNetWithAttention, RavdessPaperModel
-from audio_dataset import EmotionSpecDataset, EmotionWaveDataset, RavdessRawData
+from audio_dataset import EmotionSpecDataset, RavdessRawData
+from models import ResNetWithAttentionDropOut
 from models import SentimentModelHandler
-from pprint import pprint 
-
 
 if __name__ == '__main__':
     ravdess_raw_data = RavdessRawData()
@@ -31,18 +17,18 @@ if __name__ == '__main__':
 
 
     # create the model:
-    model_paper = ResNetWithAttention()
+    model_paper = ResNetWithAttentionDropOut()
 
     #
     # # create the handler:
     handler_paper = SentimentModelHandler(model_paper, train, val, batch_size=32, learning_rate=0.001)
     #
     # # train the model:
-    handler_paper.train_model(epochs = 20, verbose=True)
+    handler_paper.train_model(epochs = 50, verbose=True)
     #
     # # save the results in a plot:
-    handler_paper.plot_accuracies("PaperModel-ACC-fixed")
-    handler_paper.plot_losses("PaperModel-LOSS-fixed")
+    handler_paper.plot_accuracies("PaperModelDropOut-ACC-fixed")
+    handler_paper.plot_losses("PaperModelDropOut-LOSS-fixed")
     handler_paper.plot_confusion_matrix("PaperModel-Confusion-Matrix")
 
     #model_resnet = EmotionClassifier2()
