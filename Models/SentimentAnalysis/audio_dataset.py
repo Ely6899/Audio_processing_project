@@ -269,3 +269,99 @@ class EmotionWaveDataset(Dataset):
         total_samples = len(self._labels)
         class_weights = total_samples / (class_counts + 1e-6)  # Avoid division by zero
         return class_weights.float()
+    
+    
+
+
+# add RavdessRawData in which every sample is two audio-file-paths: file2classify and originalneutral
+class RavdessRawDataWithNeutral(AudioRawData):
+    def __init__(self):
+        super().__init__(RavdessPaths.AUDIO_FILES_DATA, {".wav"})
+
+    def _scan_supported_files(self) -> set[Tuple[Path, str]]:
+        """
+        Scans and saves the file paths of the model and a relevant label based on the index in the name.
+        @return: A set of tuples, each tuple holds (file path, label).
+        """
+        # noam
+        # actors_neutral_files = {} # in the following format: "actor_num" : neutral_file_path
+        
+        # for file in Path(self._data_root).rglob('*'):
+        #     if file.is_file() and any(file.name.endswith(suffix) for suffix in self._supported_formats):
+        # noam        
+        
+        files = {
+            file for file in Path(self._data_root).rglob('*')
+            if file.is_file() and any(file.name.endswith(suffix) for suffix in self._supported_formats)
+        }
+
+        result = set(map(lambda x: (x, RavdessRawDataWithNeutral.__get_emotion_from_index(x)), files))
+        return result
+
+    @staticmethod
+    def _get_attribute_from_filename(filename, attribute: str):
+        attribute2index = {
+            "modality": 0,
+            "vocal_channel": 1,
+            "emotion": 2,
+            "emotional_intensity": 3,
+            "statement": 4,
+            "repetition": 5,
+            "actor": 6
+        }
+        num2attrvalue = {
+            "modality": {"01": "full-AV", "02": "video-only", "03": "audio-only"},
+            "vocal_channel": {"01": "speech", "02": "song"},
+            "emotion": {"01": "neutral", "02": "calm", "03": "happy", "04": "sad", "05": "angry", "06": "fearful", "07": "disgust", "08": "surprised"},
+            "emotional_intensity": {"01": "normal", "02": "strong"},
+            "statement": {"01": "Kids are talking by the door", "02": "Dogs are sitting by the door"},
+            "repetition": {"01": "1st repetition", "02": "2nd repetition"},
+            "actor": {f"{i:02d}": i for i in range(1, 25)} # maps from string number to int number
+        }
+        ########################################################
+        # e.g. filename: "03-01-02-01-02-01-13.wav"
+                # desired attribute: "actor"
+        ########################################################
+        
+        # get the filename numbers | 
+        file_numbers = re.findall(r'\d+', filename.name.__str__()) # e.g. ['03', '01', '02', '01', '02', '01', '13']
+        # get the desired attribute index
+        attribute_index = attribute2index[attribute] # e.g. 6 (actor)
+        # get the desired attribute number
+        attribute_number = file_numbers[attribute_index] # e.g. "13"(index 6 at the filename numbers)
+        # get the desired attribute value
+        attribute_value = num2attrvalue[attribute][attribute_number] # e.g. "13" -> 13
+        
+        return attribute_value
+        
+        
+        
+
+   
+    @staticmethod
+    def __get_emotion_from_index(filename):
+        """
+        For RAVDESS, label is indicated in the third number in the name. This function handles mapping it to a
+        readable label.
+        @param filename: File path from RAVDESS dataset.
+        @return: Label of the file according to the index.
+        """
+        numbers = re.findall(r'\d+', filename.name.__str__())
+
+        index_emotion_mapping = {
+            '01': 'neutral',
+            '02': 'calm',
+            '03': 'happy',
+            '04': 'sad',
+            '05': 'angry',
+            '06': 'fearful',
+            '07': 'disgust',
+            '08': 'surprised'
+        }
+
+        emotion_index = numbers[2]
+        emotion = index_emotion_mapping[emotion_index]
+        return emotion
+
+
+
