@@ -13,6 +13,7 @@ class MeldPaths(EnumType):
 
 class RavdessPaths(EnumType):
     AUDIO_FILES_DATA = Path(os.path.join("RAVDESS"))
+    SYNTH_NEUTRAL_PATH = Path(os.path.join(AUDIO_FILES_DATA, "neutral_synthesized"))
 
 class TessPaths(EnumType):
     AUDIO_FILES_DATA = Path(os.path.join("TESS"))
