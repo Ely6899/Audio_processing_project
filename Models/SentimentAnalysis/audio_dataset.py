@@ -180,6 +180,9 @@ class EmotionSpecDataset(Dataset):
         self._data = list(file_paths)
         self._paths , self._labels = zip(*self._data)
 
+        #TODO: Add label mapping logic to ensure uniform label naming.
+
+
         self.__label_encoder = LabelEncoder()
         self._labels = torch.tensor(self.__label_encoder.fit_transform(self._labels))
         self._class_names = list(self.__label_encoder.classes_)
@@ -272,7 +275,7 @@ class RavdessRawDataWithNeutral(AudioRawData):
         return neutral_file_path
     
     @staticmethod
-    def _get_attribute_from_filename(filename, attribute: str) -> str | int:
+    def get_attribute_from_filename(filename, attribute: str):
         attribute2index = {
             "modality": 0,
             "vocal_channel": 1,
@@ -285,7 +288,8 @@ class RavdessRawDataWithNeutral(AudioRawData):
         num2attrvalue = {
             "modality": {"01": "full-AV", "02": "video-only", "03": "audio-only"},
             "vocal_channel": {"01": "speech", "02": "song"},
-            "emotion": {"01": "neutral", "02": "calm", "03": "happy", "04": "sad", "05": "angry", "06": "fearful", "07": "disgust", "08": "surprised"},
+            "emotion": {"01": "neutral", "02": "calm", "03": "happy", "04": "sad", "05": "angry", "06": "fearful",
+                        "07": "disgust", "08": "surprised"},
             "emotional_intensity": {"01": "normal", "02": "strong"},
             "statement": {"01": "kids", "02": "dogs"},
             "repetition": {"01": 1, "02": 2},
@@ -305,7 +309,7 @@ class RavdessRawDataWithNeutral(AudioRawData):
         # get the desired attribute value
         attribute_value = num2attrvalue[attribute][attribute_number] # e.g. "13" -> 13
         
-        return attribute_value
+        return attribute_number, attribute_value
         
     @staticmethod
     def __get_emotion_from_index(filename):
@@ -331,3 +335,13 @@ class RavdessRawDataWithNeutral(AudioRawData):
         emotion_index = numbers[2]
         emotion = index_emotion_mapping[emotion_index]
         return emotion
+
+    def __add__(self, other: 'AudioRawData') -> Tuple[set, ...]:
+        total_train_data = self.train_data.union(other.train_data)
+        total_val_data = self.val_data.union(other.val_data)
+        total_test_data = self.test_data.union(other.test_data)
+
+        return total_train_data, total_val_data, total_test_data
+
+
+
