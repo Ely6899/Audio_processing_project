@@ -12,7 +12,10 @@ class MeldPaths(EnumType):
     TEST_DATA_CSV = Path(os.path.join("test.csv"))
 
 class RavdessPaths(EnumType):
-    AUDIO_FILES_DATA = Path(os.path.join("RAVDESS"))
-
+    ORIGINAL_RELATIVE_PATH = 'original_data'
+    NEUTRAL_RELATIVE_PATH = 'neutral_synthesized'
+    ALL_AUDIO_DATA = Path(os.path.join("RAVDESS"))
+    AUDIO_ORIGINAL_DATA = Path(os.path.join(ALL_AUDIO_DATA, ORIGINAL_RELATIVE_PATH))
+    AUDIO_NEUTRAL_SYNTHESIZED_DATA = Path(os.path.join(ALL_AUDIO_DATA, NEUTRAL_RELATIVE_PATH))
 class TessPaths(EnumType):
     AUDIO_FILES_DATA = Path(os.path.join("TESS"))

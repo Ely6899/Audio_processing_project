@@ -1,6 +1,6 @@
 from collections import Counter as LabelCounter
 from abc import ABC, abstractmethod
-from typing import Tuple, Iterable, Any
+from typing import Tuple, Iterable, Any, Dict
 import re
 import torch
 from sklearn.model_selection import train_test_split
@@ -10,6 +10,7 @@ from sklearn.preprocessing import LabelEncoder
 
 from ConstPaths import RavdessPaths, TessPaths
 from Preprocess import audio_to_mel_spectrogram, audio_to_waveform
+import os
 
 class AudioRawData(ABC):
     """
@@ -18,7 +19,7 @@ class AudioRawData(ABC):
     def __init__(self, data_root: Path, supported_formats: set[str]):
         self._data_root: Path = data_root
         self._supported_formats: set[str] = supported_formats
-        self._data: set[Tuple[Path, Any]] = self._scan_supported_files() # Path, Label
+        self._data: set[Tuple[Path | Dict[Path, Path], Any]] = self._scan_supported_files() # File/s path/s, Label.  used as (Path, str) and (Dict[Path, Path], str).
 
         self._file_paths, self._file_labels = zip(*list(self._data))
         self._train_data, self._val_data, self._test_data = self._train_val_test_split()
@@ -94,7 +95,7 @@ class AudioRawData(ABC):
 
 class RavdessRawData(AudioRawData):
     def __init__(self):
-        super().__init__(RavdessPaths.AUDIO_FILES_DATA, {".wav"})
+        super().__init__(RavdessPaths.AUDIO_ORIGINAL_DATA, {".wav"})
 
     def _scan_supported_files(self) -> set[Tuple[Path, str]]:
         """
@@ -227,37 +228,51 @@ class EmotionSpecDataset(Dataset):
         total_samples = len(self._labels)
         class_weights = total_samples / (class_counts + 1e-6)  # Avoid division by zero
         return class_weights.float()
-    
-class AudioWithNeutral:
-    
 
 # add RavdessRawData in which every sample is two audio-file-paths: file2classify and originalneutral
-class RavdessRawDataWithNeutral:
+class RavdessRawDataWithNeutral(AudioRawData):
     def __init__(self):
-        super().__init__(RavdessPaths.AUDIO_FILES_DATA, {".wav"})
+        super().__init__(RavdessPaths.ALL_AUDIO_DATA, {".wav"})
+        self.original_data = Path(os.path.join(self._data_root, RavdessPaths.ORIGINAL_RELATIVE_PATH))
+        self.neutral_data = Path(os.path.join(self._data_root, RavdessPaths.NEUTRAL_RELATIVE_PATH))
 
-    def _scan_supported_files(self) -> set[Tuple[Path, str]]:
+    def _scan_supported_files(self) -> set[Tuple[Dict[Path, Path], str]]:
         """
         Scans and saves the file paths of the model and a relevant label based on the index in the name.
         @return: A set of tuples, each tuple holds (file path, label).
         """
-        # noam
-        # actors_neutral_files = {} # in the following format: "actor_num" : neutral_file_path
-        
-        # for file in Path(self._data_root).rglob('*'):
-        #     if file.is_file() and any(file.name.endswith(suffix) for suffix in self._supported_formats):
-        # noam        
         
         files = {
-            file for file in Path(self._data_root).rglob('*')
+            {
+                "audio_to_classify": file,
+                "neutral_syn_audio": self.get_assosiated_neutral_file(file)
+            }
+            for file in self.neutral_data.rglob('*')
             if file.is_file() and any(file.name.endswith(suffix) for suffix in self._supported_formats)
         }
 
-        result = set(map(lambda x: (x, RavdessRawDataWithNeutral.__get_emotion_from_index(x)), files))
+        result = {
+            (file_dict, self.__get_emotion_from_index(file_dict["audio_to_classify"])) 
+            for file_dict in files
+        }
+        
         return result
 
+    def get_assosiated_neutral_file(self, file):
+        # get audio required attributes
+        statment = RavdessRawDataWithNeutral._get_attribute_from_filename(file, "statement")
+        
+        repetition_num = RavdessRawDataWithNeutral._get_attribute_from_filename(file, "repetition")
+        
+        actor_num = RavdessRawDataWithNeutral._get_attribute_from_filename(file, "actor")
+        
+        # create a path to the neutral file
+        neutral_file_path = Path(os.path.join(self.neutral_data, f'Actor_{actor_num:02d}', f"{statment}_rep{repetition_num}_act{actor_num}.wav"))
+        
+        return neutral_file_path
+    
     @staticmethod
-    def _get_attribute_from_filename(filename, attribute: str):
+    def _get_attribute_from_filename(filename, attribute: str) -> str | int:
         attribute2index = {
             "modality": 0,
             "vocal_channel": 1,
@@ -272,8 +287,8 @@ class RavdessRawDataWithNeutral:
             "vocal_channel": {"01": "speech", "02": "song"},
             "emotion": {"01": "neutral", "02": "calm", "03": "happy", "04": "sad", "05": "angry", "06": "fearful", "07": "disgust", "08": "surprised"},
             "emotional_intensity": {"01": "normal", "02": "strong"},
-            "statement": {"01": "Kids are talking by the door", "02": "Dogs are sitting by the door"},
-            "repetition": {"01": "1st repetition", "02": "2nd repetition"},
+            "statement": {"01": "kids", "02": "dogs"},
+            "repetition": {"01": 1, "02": 2},
             "actor": {f"{i:02d}": i for i in range(1, 25)} # maps from string number to int number
         }
         ########################################################
@@ -292,10 +307,6 @@ class RavdessRawDataWithNeutral:
         
         return attribute_value
         
-        
-        
-
-   
     @staticmethod
     def __get_emotion_from_index(filename):
         """
@@ -320,6 +331,3 @@ class RavdessRawDataWithNeutral:
         emotion_index = numbers[2]
         emotion = index_emotion_mapping[emotion_index]
         return emotion
-
-
-
