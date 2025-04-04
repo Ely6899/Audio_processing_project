@@ -1,8 +1,13 @@
-from audio_dataset import EmotionSpecDataset, RavdessRawData
-from models import ResNetWithAttentionDropOut
+from audio_dataset import EmotionSpecDataset, RavdessRawData, RavdessRawDataWithNeutral, EmotionSpecDataset2d
+from models import ResNetWithAttentionDropOut, ResNetWithAttention2d, ResNetWithAttentionDropOut2d
 from models import SentimentModelHandler
+from pprint import pprint
+from Preprocess import audio_to_mel_spectrogram, standardization
+from PreprocessParams import SAMPLE_RATE
+from Visualizations import plot_loss_per_epoch, plot_accuracy_per_epoch, plot_confusion_matrix, plot_mel_spectrogram
+from pathlib import Path
 
-if __name__ == '__main__':
+def train_1channel():
     ravdess_raw_data = RavdessRawData()
     # pprint(ravdess_raw_data.all_data)
 
@@ -12,11 +17,11 @@ if __name__ == '__main__':
 
 
     #For testing pre-processing spectrogram
-    #mel_spectrogram = audio_to_mel_spectrogram(Path("RAVDESS/Actor_01/03-01-02-02-02-02-01.wav"), normalization_fn=standardization)
-    #plot_mel_spectrogram(mel_spectrogram, SAMPLE_RATE)
+    # mel_spectrogram = audio_to_mel_spectrogram(Path("RAVDESS/Actor_01/03-01-02-02-02-02-01.wav"), normalization_fn=standardization)
+    # plot_mel_spectrogram(mel_spectrogram, SAMPLE_RATE)
 
 
-    # create the model:
+    # # create the model:
     model_paper = ResNetWithAttentionDropOut()
 
     #
@@ -24,71 +29,42 @@ if __name__ == '__main__':
     handler_paper = SentimentModelHandler(model_paper, train, val, batch_size=32, learning_rate=0.001)
     #
     # # train the model:
-    handler_paper.train_model(epochs = 50, verbose=True)
-    #
+    try:
+        handler_paper.train_model(epochs = 100, verbose=True)
+    except KeyboardInterrupt:
+        print("Training was interrupted by the user.")
+        
     # # save the results in a plot:
     handler_paper.plot_accuracies("PaperModelDropOut-ACC-fixed")
     handler_paper.plot_losses("PaperModelDropOut-LOSS-fixed")
     handler_paper.plot_confusion_matrix("PaperModel-Confusion-Matrix")
 
-    #model_resnet = EmotionClassifier2()
-    #handler_resnet = SentimentModelHandler(model_resnet, train, val, batch_size=16)
+def train_2channel():
+    ravdess_raw_data = RavdessRawDataWithNeutral()
+    pprint(ravdess_raw_data.all_data)
 
-    # train the model:
-    #handler_resnet.train_model(epochs=100, verbose=True)
-    #
+    # # create the dataset with the preprocessing logic:
+    # train = EmotionSpecDataset2d(ravdess_raw_data.train_data)
+    # val = EmotionSpecDataset2d(ravdess_raw_data.val_data)
+    
+    # # create the model:
+    # model_paper = ResNetWithAttentionDropOut2d()
+    # model_name = model_paper.__class__.__name__
+    
+    # # create the handler:
+    # handler_paper = SentimentModelHandler(model_paper, train, val, batch_size=32, learning_rate=0.001)
+    
+    # # train the model:
+    # try:
+    #     handler_paper.train_model(epochs=100, verbose=True)
+    # except KeyboardInterrupt:
+    #     print("Training was interrupted by the user.")
+        
     # # save the results in a plot:
-    #handler_resnet.plot_accuracies("SimpleResidual-ACC-fixed")
-    #handler_resnet.plot_losses("SimpleResidual-LOSS-fixed")
-    
-    # S_dB_np = mel_spectogram.cpu().numpy()
-    # # Invert mel spectrogram to get the magnitude spectrogram
-    # S_inv = librosa.db_to_power(S_dB_np)  # Convert back to power spectrogram
+    # handler_paper.plot_accuracies(f"{model_name}-ACC-fixed")
+    # handler_paper.plot_losses(f"{model_name}-LOSS-fixed")
+    # handler_paper.plot_confusion_matrix(f"{model_name}-Confusion-Matrix")
 
-    # Reconstruct the audio using Griffin-Lim algorithm
-    # y_reconstructed = librosa.feature.inverse.mel_to_audio(S_inv, sr=16000, n_iter=32, hop_length=512)
-    #
-    # print(f"Audio data type: {y_reconstructed.dtype}")
-    # print(f"Audio waveform shape: {y_reconstructed.shape}")
-    # print(f"Min value: {np.min(y_reconstructed)}, Max value: {np.max(y_reconstructed)}")
-    #
-    # y_reconstructed = y_reconstructed.flatten()
-    # # Save the reconstructed audio to a file
-    # sf.write('reconstructed_audio_old_algo.wav', y_reconstructed, 16000)
-
-    # plot_mel_spectrogram(mel_spectogram, sample_rate)
-    #plot_waveform(waveform, SAMPLE_RATE)
-    
-    # Load datasets
-    # train_dataset = EmotionSpecDataset(ravdess_raw_data.train_data)
-    # val_dataset = EmotionSpecDataset(ravdess_raw_data.val_data)
-
-
-
-    # y, sr = librosa.load(file_path, sr=16000)  # y is the audio signal, sr is the sampling rate
-    # S = librosa.feature.melspectrogram(y=y, sr=sr, n_mels=256)
-    #
-    # # Convert to decibels (log scale) for better visualization
-    # S_dB = librosa.power_to_db(S, ref=np.max)
-    #
-    # # Plot the Mel spectrogram
-    # plt.figure(figsize=(10, 6))
-    # librosa.display.specshow(S_dB, x_axis='time', y_axis='mel', sr=sr)
-    # plt.colorbar(format='%+2.0f dB')
-    # plt.title('Mel Spectrogram')
-    # plt.show()
-    #
-    # # Invert mel spectrogram to get the magnitude spectrogram
-    # S_inv = librosa.db_to_power(S_dB)  # Convert back to power spectrogram
-    #
-    # y_reconstructed = librosa.feature.inverse.mel_to_audio(S_inv, sr=16000, n_iter=32, hop_length=512)
-    #
-    # print(f"Audio data type: {y_reconstructed.dtype}")
-    # print(f"Audio waveform shape: {y_reconstructed.shape}")
-    # print(f"Min value: {np.min(y_reconstructed)}, Max value: {np.max(y_reconstructed)}")
-    #
-    # y_reconstructed = y_reconstructed.flatten()
-    # # Save the reconstructed audio to a file
-    # sf.write('reconstructed_audio_new_algo.wav', y_reconstructed, 16000)
-
-
+if __name__ == '__main__':
+    # plot_mel_spectrogram(audio_to_mel_spectrogram(Path(r"RAVDESS\original_data\Actor_01\03-01-01-01-01-01-01.wav"), top_db=20), SAMPLE_RATE)
+    train_1channel()

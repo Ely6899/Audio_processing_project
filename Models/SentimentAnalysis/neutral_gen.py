@@ -3,11 +3,13 @@ from pathlib import Path
 import typing
 import re
 from tqdm import tqdm
+import torch
+from TTS.api import TTS
 
 from ConstPaths import RavdessPaths
 from audio_dataset import RavdessRawDataWithNeutral
 
-#: A dictionary mapping statement keys to their corresponding text phrases.
+#: A dictionary mapping statement keys to their corresponding text phrases. # noam: check
 STATEMENT_MAPPING = {
     "kids": "Kids are talking by the door",
     "dogs": "Dogs are sitting by the door",
@@ -18,12 +20,12 @@ def get_neutral_files_from_ravdess() -> typing.Set[Path]:
     Retrieves all neutral audio files from the RAVDESS dataset.
 
     This function searches for .wav files with the neutral identifier ("01")
-    in their filename within the `RavdessPaths.AUDIO_FILES_DATA` directory.
+    in their filename within the `RavdessPaths.AUDIO_ORIGINAL_DATA` directory.
 
     :return: A set of Path objects representing the file paths of the neutral audio files.
     :rtype: typing.Set[Path]
     """
-    all_neutral_files: typing.Set[Path] = set(RavdessPaths.AUDIO_FILES_DATA.rglob("*-*-01-*-*-*-*.wav"))
+    all_neutral_files: typing.Set[Path] = set(RavdessPaths.AUDIO_ORIGINAL_DATA.rglob("*-*-01-*-*-*-*.wav"))
     return all_neutral_files
 
 
@@ -75,7 +77,7 @@ def get_repetition_number_value(file_path: Path) -> typing.Tuple[str, int]:
     return repetition_number, repetition_value
 
 
-def fetch_data_for_deepfake() -> None:
+def create_txt_files_for_deepfake() -> None:
     """
     Fetches neutral audio files and generates corresponding text files for deepfake processing.
 
@@ -87,7 +89,7 @@ def fetch_data_for_deepfake() -> None:
     neutral_files_paths: typing.Set[Path] = get_neutral_files_from_ravdess()
     for file_path in tqdm(neutral_files_paths, "Saving txt files for deepfake_process"):
         actor_number, actor_value = get_actor_number_value(file_path)
-        actor_path: Path = Path(os.path.join(RavdessPaths.SYNTH_NEUTRAL_PATH, f"Actor_{actor_number}"))
+        actor_path: Path = Path(os.path.join(RavdessPaths.TXT_FOR_DEEPFAKE_PATH, f"Actor_{actor_number}"))
 
         os.makedirs(actor_path, exist_ok=True)
 
@@ -135,5 +137,54 @@ def fetch_data_for_deepfake() -> None:
         with open(saved_file_path, 'w') as saved_file:
             saved_file.writelines([STATEMENT_MAPPING.get(statement_value), '\n', neutral_audio_path_reference.__str__()])
 
+def deepfake_and_create_synthesized_dataset(tts_model) -> None:
+    """
+    Creates a synthesized dataset for deepfake processing.
+
+    This function generates a directory structure for the synthesized dataset,
+    including subdirectories for each actor and files for each statement and repetition(actor num is also part of the filename).
+    
+    the directory structure is as follows:
+    neutral_synthesized/
+		* Actor_\<num\>
+			* Exactly **four** files at the form: \$$statment$\$\_\$$repetitionNum$\$\_\$$actorNum$\$
+				- spesificly: 
+					* dogs_rep1_act1.wav:
+							a syntesised speech saying "there are dogs..." who has been generated with the original audio of the same speeker saying "there are kids ..."
+					* dogs_rep2_act1.wav
+					* kids_rep1_act1.wav
+					* kids_rep2_act1.wav
+    the neutral_synthesized dir should be in the ALL_AUDIO_DATA folder
+    """
+    
+    for text_file in tqdm(RavdessPaths.TXT_FOR_DEEPFAKE_PATH.rglob("*.txt"), "Creating synthesized dataset"):
+        with open(text_file, 'r') as file:
+            lines = file.readlines()
+            statement = lines[0].strip()
+            neutral_audio_path_reference = lines[1].strip()
+
+            # Extract the actor number from the text file name
+            actor_shortcut = text_file.stem.split("_")[2] # noam: need to check if stem or name is correct here
+            actor_number = f'{int(actor_shortcut.split("act")[1]):02d}'
+            
+            actor_dir = Path(os.path.join(RavdessPaths.AUDIO_NEUTRAL_SYNTHESIZED_DATA, f"Actor_{actor_number}"))
+            os.makedirs(actor_dir, exist_ok=True)
+            
+            # store the file path for the synthesized audio
+            synthesized_audio_path = Path(os.path.join(actor_dir, text_file.stem + ".wav"))
+            
+            # Create the synthesized audio file (this is a placeholder, replace with actual synthesis logic)
+            # Here, you would typically call your deepfake synthesis function
+            # For example: synthesize_audio(statement, neutral_audio_path_reference, synthesized_audio_path)
+            
+            tts_model.tts_to_file(text=statement, speaker_wav=neutral_audio_path_reference, language="en", file_path=synthesized_audio_path)
+            
+
 if __name__ == '__main__':
-    fetch_data_for_deepfake()
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"Using device: {device}")
+    tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2").to(device)
+
+    create_txt_files_for_deepfake()
+    
+    deepfake_and_create_synthesized_dataset(tts)

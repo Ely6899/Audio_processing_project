@@ -54,6 +54,10 @@ def audio_to_waveform(file_path: Path, target_sample_rate: int = SAMPLE_RATE):
 
     return waveform, loaded_sample_rate
 
+def trim_silence(waveform: np.ndarray, top_db: int = 20) -> np.ndarray:
+    trimmed_waveform, _ = librosa.effects.trim(waveform, top_db=top_db)
+    return trimmed_waveform
+
 
 def audio_to_mel_spectrogram(file_path: Path,
                             sample_rate: int = SAMPLE_RATE,
@@ -63,6 +67,7 @@ def audio_to_mel_spectrogram(file_path: Path,
                             n_mels: int = FREQUENCY_BIN_COUNT,
                             max_length_in_seconds: float = MAX_SPECTOGRAM_DURATION_IN_SECONDS,
                             resizing = True,
+                            top_db: int = TOP_DB,
                             normalization_fn: Callable[[np.ndarray], np.ndarray] = standardization):
     """
     Given audio file path, extracts its waveform and from it creates a mel-spectrogram.
@@ -79,6 +84,7 @@ def audio_to_mel_spectrogram(file_path: Path,
     """
     waveform, sample_rate = audio_to_waveform(file_path, sample_rate)
 
+    waveform = trim_silence(waveform, top_db=top_db)
     #waveform = librosa.effects.preemphasis(waveform)
 
     mel_spectrogram = librosa.feature.melspectrogram(y=waveform,

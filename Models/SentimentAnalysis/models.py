@@ -504,7 +504,6 @@ class ResidualBlockNew(nn.Module):
         out = self.relu(out)
         return out
 
-
 class ResNetModule(nn.Module):
     def __init__(self, in_channels, out_channels, num_blocks, stride=1):
         super(ResNetModule, self).__init__()
@@ -588,7 +587,6 @@ class ResNetWithAttention(nn.Module):
 
         return x
 
-
 class ResNetWithAttentionDropOut(nn.Module):
     def __init__(self, num_classes=8):
         super(ResNetWithAttentionDropOut, self).__init__()
@@ -660,7 +658,142 @@ class ResNetWithAttentionDropOut(nn.Module):
         return x
 
 
+"""ResNet 2 channels"""
+class ResNetWithAttention2d(nn.Module):
+    def __init__(self, num_classes=8):
+        super(ResNetWithAttention2d, self).__init__()
 
+        # Initial convolutional block
+        self.conv1 = nn.Conv2d(2, 32, kernel_size=3, stride=1, padding=1)
+        self.bn1 = nn.BatchNorm2d(32)
+
+        # First submodule with 64 filters
+        self.module1 = ResNetModule(32, 64, num_blocks=2, stride=2)
+
+        # Second submodule with 128 filters
+        self.module2 = ResNetModule(64, 128, num_blocks=2, stride=2)
+
+        # Third submodule with 256 filters
+        self.module3 = ResNetModule(128, 256, num_blocks=2, stride=2)
+
+        # Attention layer (Self-Attention)
+        self.attention = nn.MultiheadAttention(embed_dim=256, num_heads=8, batch_first=True)
+
+        # Final batch normalization and ReLU
+        self.bn2 = nn.BatchNorm2d(256)
+        self.relu = nn.ReLU()
+
+        # Fully connected layers (FC layers)
+        self.fc1 = nn.Linear(256 * (TARGET_FRAMES // 8) * (FREQUENCY_BIN_COUNT // 8), 1024)  # Assuming input size (32x32)
+        self.bn_fc1 = nn.BatchNorm1d(1024)
+
+        self.fc2 = nn.Linear(1024, 512)
+        self.bn_fc2 = nn.BatchNorm1d(512)
+
+        # Output layer (final classification layer)
+        self.fc_out = nn.Linear(512, num_classes)
+
+    def forward(self, x):
+        # Initial convolution
+        x = self.relu(self.bn1(self.conv1(x)))
+
+        # Pass through the residual modules
+        x = self.module1(x)
+        x = self.module2(x)
+        x = self.module3(x)
+
+        # Apply attention
+        batch_size, channels, height, width = x.size()
+        x = x.view(batch_size, channels, -1).transpose(1, 2)  # Flatten the spatial dimensions
+        x, _ = self.attention(x, x, x)
+        x = x.transpose(1, 2).view(batch_size, channels, height, width)  # Reshape back to 4D
+
+        # Final batch normalization and ReLU activation
+        x = self.relu(self.bn2(x))
+
+        # Flatten for FC layers
+        x = x.reshape(x.size(0), -1)  # Flatten the tensor
+
+        # First FC layer
+        x = self.relu(self.bn_fc1(self.fc1(x)))
+
+        # Second FC layer
+        x = self.relu(self.bn_fc2(self.fc2(x)))
+
+        # Output layer (classification)
+        x = self.fc_out(x)
+
+        return x
+
+class ResNetWithAttentionDropOut2d(nn.Module):
+    def __init__(self, num_classes=8):
+        super(ResNetWithAttentionDropOut2d, self).__init__()
+
+        # Initial convolutional block
+        self.conv1 = nn.Conv2d(2, 32, kernel_size=3, stride=1, padding=1)
+        self.bn1 = nn.BatchNorm2d(32)
+
+        # First submodule with 64 filters
+        self.module1 = ResNetModule(32, 64, num_blocks=2, stride=2)
+
+        # Second submodule with 128 filters
+        self.module2 = ResNetModule(64, 128, num_blocks=2, stride=2)
+
+        # Third submodule with 256 filters
+        self.module3 = ResNetModule(128, 256, num_blocks=2, stride=2)
+
+        # Attention layer (Self-Attention)
+        self.attention = nn.MultiheadAttention(embed_dim=256, num_heads=8, batch_first=True)
+
+        # Final batch normalization and ReLU
+        self.bn2 = nn.BatchNorm2d(256)
+        self.relu = nn.ReLU()
+
+        # Fully connected layers (FC layers)
+        self.fc1 = nn.Linear(256 * (TARGET_FRAMES // 8) * (FREQUENCY_BIN_COUNT // 8), 1024)  # Assuming input size (32x32)
+        self.bn_fc1 = nn.BatchNorm1d(1024)
+        self.dropout1 = nn.Dropout(0.6)
+
+        self.fc2 = nn.Linear(1024, 512)
+        self.bn_fc2 = nn.BatchNorm1d(512)
+        self.dropout2 = nn.Dropout(0.6)
+
+        # Output layer (final classification layer)
+        self.fc_out = nn.Linear(512, num_classes)
+
+    def forward(self, x):
+        # Initial convolution
+        x = self.relu(self.bn1(self.conv1(x)))
+
+        # Pass through the residual modules
+        x = self.module1(x)
+        x = self.module2(x)
+        x = self.module3(x)
+
+        # Apply attention
+        batch_size, channels, height, width = x.size()
+        x = x.view(batch_size, channels, -1).transpose(1, 2)  # Flatten the spatial dimensions
+        x, _ = self.attention(x, x, x)
+        x = x.transpose(1, 2).view(batch_size, channels, height, width)  # Reshape back to 4D
+
+        # Final batch normalization and ReLU activation
+        x = self.relu(self.bn2(x))
+
+        # Flatten for FC layers
+        x = x.reshape(x.size(0), -1)  # Flatten the tensor
+
+        # First FC layer
+        x = self.relu(self.bn_fc1(self.fc1(x)))
+        x = self.dropout1(x)
+
+        # Second FC layer
+        x = self.relu(self.bn_fc2(self.fc2(x)))
+        x = self.dropout2(x)
+
+        # Output layer (classification)
+        x = self.fc_out(x)
+
+        return x
 
 
 

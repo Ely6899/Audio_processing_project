@@ -232,45 +232,101 @@ class EmotionSpecDataset(Dataset):
         class_weights = total_samples / (class_counts + 1e-6)  # Avoid division by zero
         return class_weights.float()
 
+class EmotionSpecDataset2d(Dataset):
+    def __init__(self, data: set):
+        self._data = list(data)
+        self._paths , self._labels = zip(*self._data)
+
+        #TODO: Add label mapping logic to ensure uniform label naming.
+
+
+        self.__label_encoder = LabelEncoder()
+        self._labels = torch.tensor(self.__label_encoder.fit_transform(self._labels))
+        self._class_names = list(self.__label_encoder.classes_)
+
+        # Get the number of classes
+        self.num_classes = len(self.__label_encoder.classes_)
+
+        # Compute class weights
+        self.class_weights = self.__compute_class_weights()
+
+    def __len__(self):
+        return len(self._data)
+
+    def __getitem__(self, idx):
+        file_pair = self._paths[idx]
+        label = self._labels[idx]
+
+        # noam: audio_to_mel_spectrogram returns shape (freq_bins, time_frames)
+        original_mel_spectrogram = audio_to_mel_spectrogram(file_path=file_pair[0]) # original audio
+        synthesized_mel_spectrogram = audio_to_mel_spectrogram(file_path=file_pair[1]) # synthesized audio
+        
+        # Convert to torch.Tensor
+        original_mel_spectrogram = torch.from_numpy(original_mel_spectrogram).float()
+        synthesized_mel_spectrogram = torch.from_numpy(synthesized_mel_spectrogram).float()
+        
+        # now add the two spectrograms to create a 2D tensor with shape (2, freq_bins, time_frames)
+        mel_spectrogram = torch.stack((original_mel_spectrogram, synthesized_mel_spectrogram), dim=0)
+
+        label = label.long()
+
+        return mel_spectrogram, label
+
+    @property
+    def class_names(self):
+        return self._class_names
+
+    def decode_label(self, encoded_label):
+        return self.__label_encoder.inverse_transform([encoded_label])[0]
+
+    def __compute_class_weights(self) -> torch.Tensor:
+        """
+        Computes class weights based on the frequency of each class in the dataset.
+
+        Returns:
+            torch.Tensor: Tensor of class weights (inverse frequency).
+        """
+        class_counts = torch.bincount(self._labels, minlength=self.num_classes)
+        total_samples = len(self._labels)
+        class_weights = total_samples / (class_counts + 1e-6)  # Avoid division by zero
+        return class_weights.float()
+
 # add RavdessRawData in which every sample is two audio-file-paths: file2classify and originalneutral
 class RavdessRawDataWithNeutral(AudioRawData):
     def __init__(self):
         super().__init__(RavdessPaths.ALL_AUDIO_DATA, {".wav"})
-        self.original_data = Path(os.path.join(self._data_root, RavdessPaths.ORIGINAL_RELATIVE_PATH))
-        self.neutral_data = Path(os.path.join(self._data_root, RavdessPaths.NEUTRAL_RELATIVE_PATH))
 
     def _scan_supported_files(self) -> set[Tuple[Dict[Path, Path], str]]:
         """
         Scans and saves the file paths of the model and a relevant label based on the index in the name.
         @return: A set of tuples, each tuple holds (file path, label).
         """
+        self.neutral_data = Path(os.path.join(self._data_root, RavdessPaths.NEUTRAL_RELATIVE_PATH))
+        self.original_data = Path(os.path.join(self._data_root, RavdessPaths.ORIGINAL_RELATIVE_PATH))
         
         files = {
-            {
-                "audio_to_classify": file,
-                "neutral_syn_audio": self.get_assosiated_neutral_file(file)
-            }
-            for file in self.neutral_data.rglob('*')
+            (file, self.get_assosiated_neutral_file(file))
+            for file in self.original_data.rglob('*')
             if file.is_file() and any(file.name.endswith(suffix) for suffix in self._supported_formats)
         }
 
         result = {
-            (file_dict, self.__get_emotion_from_index(file_dict["audio_to_classify"])) 
-            for file_dict in files
+            (tuple, self.get_attribute_from_filename(tuple[0], "emotion")[1]) 
+            for tuple in files
         }
         
         return result
 
     def get_assosiated_neutral_file(self, file):
         # get audio required attributes
-        statment = RavdessRawDataWithNeutral._get_attribute_from_filename(file, "statement")
+        statement_num, statment = RavdessRawDataWithNeutral.get_attribute_from_filename(file, "statement")
         
-        repetition_num = RavdessRawDataWithNeutral._get_attribute_from_filename(file, "repetition")
+        repetition_num_str, repetition_num_int = RavdessRawDataWithNeutral.get_attribute_from_filename(file, "repetition")
         
-        actor_num = RavdessRawDataWithNeutral._get_attribute_from_filename(file, "actor")
+        actor_num_str, actor_num_int = RavdessRawDataWithNeutral.get_attribute_from_filename(file, "actor")
         
         # create a path to the neutral file
-        neutral_file_path = Path(os.path.join(self.neutral_data, f'Actor_{actor_num:02d}', f"{statment}_rep{repetition_num}_act{actor_num}.wav"))
+        neutral_file_path = Path(os.path.join(self.neutral_data, f'Actor_{actor_num_int:02d}', f"{statment}_rep{repetition_num_int}_act{actor_num_int}.wav"))
         
         return neutral_file_path
     
@@ -311,37 +367,3 @@ class RavdessRawDataWithNeutral(AudioRawData):
         
         return attribute_number, attribute_value
         
-    @staticmethod
-    def __get_emotion_from_index(filename):
-        """
-        For RAVDESS, label is indicated in the third number in the name. This function handles mapping it to a
-        readable label.
-        @param filename: File path from RAVDESS dataset.
-        @return: Label of the file according to the index.
-        """
-        numbers = re.findall(r'\d+', filename.name.__str__())
-
-        index_emotion_mapping = {
-            '01': 'neutral',
-            '02': 'calm',
-            '03': 'happy',
-            '04': 'sad',
-            '05': 'angry',
-            '06': 'fearful',
-            '07': 'disgust',
-            '08': 'surprised'
-        }
-
-        emotion_index = numbers[2]
-        emotion = index_emotion_mapping[emotion_index]
-        return emotion
-
-    def __add__(self, other: 'AudioRawData') -> Tuple[set, ...]:
-        total_train_data = self.train_data.union(other.train_data)
-        total_val_data = self.val_data.union(other.val_data)
-        total_test_data = self.test_data.union(other.test_data)
-
-        return total_train_data, total_val_data, total_test_data
-
-
-

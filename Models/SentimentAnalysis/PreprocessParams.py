@@ -12,5 +12,6 @@ MAX_SAMPLES = int(MAX_SPECTOGRAM_DURATION_IN_SECONDS * SAMPLE_RATE)
 # Calculate the target number of frames for the spectrogram
 #NOTE: For now, needs to be divisible by 8.
 TARGET_FRAMES = (MAX_SAMPLES - WINDOW_LENGTH) // HOP_LENGTH + 1 # noam: this is the right formula for the number of frames
+TOP_DB = 20
 
 # print(TARGET_FRAMES) # debug
