@@ -1,5 +1,5 @@
 from audio_dataset import EmotionSpecDataset, RavdessRawData, RavdessRawDataWithNeutral, EmotionSpecDataset2d
-from models import ResNetWithAttentionDropOut, ResNetWithAttention2d, ResNetWithAttentionDropOut2d
+from models import ResNetWithAttentionDropOut, ResNetWithAttention2d, ResNetWithAttentionDropOut2d, ResNetWithAttention
 from models import SentimentModelHandler
 from pprint import pprint
 from Preprocess import audio_to_mel_spectrogram, standardization
@@ -22,7 +22,7 @@ def train_1channel():
 
 
     # # create the model:
-    model_paper = ResNetWithAttentionDropOut()
+    model_paper = ResNetWithAttention(num_classes=7)
 
     #
     # # create the handler:
@@ -30,14 +30,14 @@ def train_1channel():
     #
     # # train the model:
     try:
-        handler_paper.train_model(epochs = 100, verbose=True)
+        handler_paper.train_model(epochs = 50, verbose=True)
     except KeyboardInterrupt:
         print("Training was interrupted by the user.")
         
     # # save the results in a plot:
-    handler_paper.plot_accuracies("PaperModelDropOut-ACC-fixed")
-    handler_paper.plot_losses("PaperModelDropOut-LOSS-fixed")
-    handler_paper.plot_confusion_matrix("PaperModel-Confusion-Matrix")
+    handler_paper.plot_accuracies("PaperModelSeven-ACC-fixed")
+    handler_paper.plot_losses("PaperModelSeven-LOSS-fixed")
+    handler_paper.plot_confusion_matrix("PaperModel-Confusion-Matrix-Seven")
 
 def train_2channel():
     ravdess_raw_data = RavdessRawDataWithNeutral()

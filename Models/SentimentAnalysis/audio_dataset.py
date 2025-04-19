@@ -94,7 +94,8 @@ class AudioRawData(ABC):
         print(f"Test label counts: {self.labels_count_test()}")
 
 class RavdessRawData(AudioRawData):
-    def __init__(self):
+    def __init__(self, include_calm: bool = False):
+        self._include_calm = include_calm
         super().__init__(RavdessPaths.AUDIO_ORIGINAL_DATA, {".wav"})
 
     def _scan_supported_files(self) -> set[Tuple[Path, str]]:
@@ -107,11 +108,10 @@ class RavdessRawData(AudioRawData):
             if file.is_file() and any(file.name.endswith(suffix) for suffix in self._supported_formats)
         }
 
-        result = set(map(lambda x: (x, RavdessRawData.__get_emotion_from_index(x)), files))
+        result = set(map(lambda x: (x, self.__get_emotion_from_index(x)), files))
         return result
 
-    @staticmethod
-    def __get_emotion_from_index(filename):
+    def __get_emotion_from_index(self, filename):
         """
         For RAVDESS, label is indicated in the third number in the name. This function handles mapping it to a
         readable label.
@@ -122,7 +122,7 @@ class RavdessRawData(AudioRawData):
 
         index_emotion_mapping = {
             '01': 'neutral',
-            '02': 'calm',
+            '02': 'neutral' if not self._include_calm else 'calm',
             '03': 'happy',
             '04': 'sad',
             '05': 'angry',
@@ -179,9 +179,6 @@ class EmotionSpecDataset(Dataset):
     def __init__(self, file_paths: set):
         self._data = list(file_paths)
         self._paths , self._labels = zip(*self._data)
-
-        #TODO: Add label mapping logic to ensure uniform label naming.
-
 
         self.__label_encoder = LabelEncoder()
         self._labels = torch.tensor(self.__label_encoder.fit_transform(self._labels))
