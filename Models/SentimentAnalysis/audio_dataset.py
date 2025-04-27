@@ -234,8 +234,6 @@ class EmotionSpecDataset2d(Dataset):
         self._data = list(data)
         self._paths , self._labels = zip(*self._data)
 
-        #TODO: Add label mapping logic to ensure uniform label naming.
-
 
         self.__label_encoder = LabelEncoder()
         self._labels = torch.tensor(self.__label_encoder.fit_transform(self._labels))
