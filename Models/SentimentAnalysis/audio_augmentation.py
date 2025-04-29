@@ -14,10 +14,10 @@ pitch‑shifting).
 from __future__ import annotations
 
 import random
-from typing import Tuple, Union
+from typing import Union
 
-import numpy as np
 import librosa
+import numpy as np
 
 __all__ = [
     "add_background_noise",

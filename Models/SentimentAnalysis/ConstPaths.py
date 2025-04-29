@@ -19,5 +19,6 @@ class RavdessPaths(EnumType):
     AUDIO_NEUTRAL_SYNTHESIZED_DATA = Path(os.path.join(ALL_AUDIO_DATA, NEUTRAL_RELATIVE_PATH))
     TXT_FOR_DEEPFAKE_PATH = Path(os.path.join(ALL_AUDIO_DATA, "txt_for_deepfake"))
     WORD_CHUNKED_AUDIO_DATA = Path(os.path.join(ALL_AUDIO_DATA, "chunked_word_audio"))
+    DOUBLE_SENTENCE_AUDIO_DATA = Path(os.path.join(ALL_AUDIO_DATA, "double_sentence_audio"))
 class TessPaths(EnumType):
     AUDIO_FILES_DATA = Path(os.path.join("TESS"))

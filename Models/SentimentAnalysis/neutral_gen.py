@@ -4,6 +4,9 @@ import typing
 import re
 from tqdm import tqdm
 import torch
+#from torch.serialization import add_safe_globals
+from TTS.tts.configs.xtts_config import XttsAudioConfig, XttsConfig
+from TTS.tts.configs.shared_configs import BaseDatasetConfig
 from TTS.api import TTS
 
 from ConstPaths import RavdessPaths
@@ -181,10 +184,10 @@ def deepfake_and_create_synthesized_dataset(tts_model) -> None:
             
 
 if __name__ == '__main__':
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"Using device: {device}")
-    tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2").to(device)
-
     create_txt_files_for_deepfake()
-    
-    deepfake_and_create_synthesized_dataset(tts)
+
+    # device = "cuda" if torch.cuda.is_available() else "cpu"
+    # print(f"Using device: {device}")
+    # tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2").to(device)
+    #
+    # deepfake_and_create_synthesized_dataset(tts)

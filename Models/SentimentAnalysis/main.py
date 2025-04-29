@@ -1,5 +1,5 @@
 import os
-from typing import Union
+from typing import Union, Optional
 
 import librosa
 import numpy as np
@@ -22,7 +22,8 @@ from pathlib import Path
 import whisper
 
 def train_1channel():
-    ravdess_raw_data = RavdessRawData()
+    ravdess_raw_data = RavdessRawData(raw_data_root=RavdessPaths.DOUBLE_SENTENCE_AUDIO_DATA, include_calm=True)
+
     # pprint(ravdess_raw_data.all_data)
 
     # create the dataset with the preprocessing logic:
@@ -36,7 +37,7 @@ def train_1channel():
 
 
     # # create the model:
-    model_paper = ResNetWithAttention(num_classes=7)
+    model_paper = ResNetWithAttention(num_classes=8)
 
     #
     # # create the handler:
@@ -49,9 +50,9 @@ def train_1channel():
         print("Training was interrupted by the user.")
         
     # # save the results in a plot:
-    handler_paper.plot_accuracies("PaperModelSeven-ACC-fixed")
-    handler_paper.plot_losses("PaperModelSeven-LOSS-fixed")
-    handler_paper.plot_confusion_matrix("PaperModel-Confusion-Matrix-Seven")
+    handler_paper.plot_accuracies("DOUBLE_SENTENCE_RESNET-8-ACC-fixed")
+    handler_paper.plot_losses("DOUBLE_SENTENCE_RESNET-LOSS-fixed")
+    handler_paper.plot_confusion_matrix("DOUBLE_SENTENCE_RESNET-Matrix")
 
 def train_2channel():
     ravdess_raw_data = RavdessRawDataWithNeutral()
@@ -79,65 +80,98 @@ def train_2channel():
     # handler_paper.plot_losses(f"{model_name}-LOSS-fixed")
     # handler_paper.plot_confusion_matrix(f"{model_name}-Confusion-Matrix")
 
-def segment_words_with_timestamps(model: Whisper, file_path: Union[str, Path]) -> set[tuple[str, float, float]]:
+def segment_words_with_timestamps(model: Whisper, file_path_original: Union[str, Path]) -> list[tuple[str, float, float]]:
     #segmentation_model = whisper.load_model("small.en", device="cuda" if torch.cuda.is_available() else "cpu")
     results = whisper.transcribe(model,
-                                 file_path.__str__(),
+                                 file_path_original.__str__(),
                                  word_timestamps=True)
 
     print(results)
     segmented_words = results['segments'][0]['words']
-    organized_results: set = set()
+    organized_results: list = []
     for segmented_word_data_dict in segmented_words:
         segmented_word: str = segmented_word_data_dict['word']
         timestamp_start: float = segmented_word_data_dict['start']
         timestamp_end: float = segmented_word_data_dict['end']
-        organized_results.add((segmented_word, timestamp_start, timestamp_end))
+
+        print(f"({segmented_word}, {timestamp_start:.4f}, {timestamp_end:.4f})")
+        organized_results.append((segmented_word, timestamp_start, timestamp_end))
 
     return organized_results
 
-def create_new_audio_from_segments(audio_path: Union[str, Path], segments: set[tuple[str, float, float]]) -> None:
-    audio_path = Path(audio_path)
-    actor_folder, audio_file_name = audio_path.parts[-2:]
-    audio_data, sr = librosa.load(audio_path, mono=True, sr=SAMPLE_RATE)
+def create_new_audio_from_segments(audio_path_original: Union[str, Path],
+                                   segments_original: list[tuple[str, float, float]],
+                                   audio_path_neutral: [Union[str, Path]],
+                                   segments_neutral: [list[tuple[str, float, float]]]) -> None:
+
+    assert len(segments_original) == len(segments_neutral), "Word segments don't match in length!"
+
+    audio_path_original = Path(audio_path_original)
+    actor_folder, audio_file_name = audio_path_original.parts[-2:]
+
+    audio_path_neutral = Path(audio_path_neutral)
+
+    pause_duration = 0.3  # in seconds
+    pause = np.zeros(int(SAMPLE_RATE * pause_duration))
+
+    audio_data_original, sr = librosa.load(audio_path_original, mono=True, sr=SAMPLE_RATE)
+    audio_data_neutral, sr = librosa.load(audio_path_neutral, mono=True, sr=SAMPLE_RATE)
+
     new_audio_data: list = []
 
-    for _, start, end in segments:
-        start_index = int(start*sr)
-        end_index = int(end*sr)
-        audio_segment = audio_data[start_index:end_index]
+    for original_values, neutral_values in zip(segments_original, segments_neutral):
+        word_original, start_time_original, end_time_original = original_values
+        word_neutral, start_time_neutral, end_time_neutral = neutral_values
 
-        padded_audio_segment = np.pad(audio_segment, pad_width=(5, 5), mode='constant', constant_values=0)
-        new_audio_data.extend(padded_audio_segment)
+        assert word_original == word_neutral, "Non matching words!"
 
-    new_audio_data = np.array(new_audio_data).reshape(-1,1)
+        start_index_original, start_index_neutral = int(start_time_original*sr), int(start_time_neutral*sr)
+        end_index_original, end_index_neutral = int(end_time_original*sr), int(end_time_neutral*sr)
+
+        audio_segment_original = audio_data_original[start_index_original:end_index_original]
+        audio_segment_neutral = audio_data_neutral[start_index_neutral:end_index_neutral]
+
+        new_audio_data.append(audio_segment_original)
+        new_audio_data.append(pause)
+        new_audio_data.append(audio_segment_neutral)
+        new_audio_data.append(pause)
+
+    final_audio = np.concatenate(new_audio_data)
 
     folder_to_create = RavdessPaths.WORD_CHUNKED_AUDIO_DATA / actor_folder
     os.makedirs(folder_to_create, exist_ok=True)
     output_path = folder_to_create / audio_file_name
     print(f"Saving new file to {output_path}")
 
-    sf.write(output_path, new_audio_data, samplerate=SAMPLE_RATE)
+    sf.write(output_path, final_audio, samplerate=SAMPLE_RATE)
 
 
 if __name__ == '__main__':
-    segmentation_model = whisper.load_model("small.en", device="cuda" if torch.cuda.is_available() else "cpu")
+    #segmentation_model = whisper.load_model("medium.en", device="cuda" if torch.cuda.is_available() else "cpu")
     # results = whisper.transcribe(segmentation_model,
     #                              "RAVDESS/original_data/Actor_01/03-01-01-01-01-01-01.wav",
     #                              word_timestamps=True)
 
-    file_to_test: str = "RAVDESS/original_data/Actor_02/03-01-01-01-01-01-02.wav"
+    #Kids, Rep1
+    #file_to_test: str = "RAVDESS/original_data/Actor_02/03-01-01-01-01-01-02.wav"
 
-    segmentation_results = segment_words_with_timestamps(model=segmentation_model,
-                                                         file_path=file_to_test)
+    #matching_neutral_file: str = "RAVDESS/neutral_synthesized/Actor_02/kids_rep1_act2.wav"
 
-    create_new_audio_from_segments(file_to_test, segmentation_results)
+    #combine_audios(file_path_original=file_to_test, file_path_neutral=matching_neutral_file)
 
-    segment_words_with_timestamps(segmentation_model, "RAVDESS/chunked_word_audio/Actor_02/03-01-01-01-01-01-02.wav")
+    # segmentation_results_original = segment_words_with_timestamps(model=segmentation_model,
+    #                                                      file_path_original=file_to_test)
+    #
+    # segmentation_results_neutral = segment_words_with_timestamps(model = segmentation_model,
+    #                                                              file_path_original=matching_neutral_file)
+    #
+    # create_new_audio_from_segments(file_to_test, segmentation_results_original, matching_neutral_file, segmentation_results_neutral)
+    #
+    # segment_words_with_timestamps(segmentation_model, "RAVDESS/chunked_word_audio/Actor_02/03-01-01-01-01-01-02.wav")
 
 
-    #print(segmentation_results)
-
+    # print(segmentation_results)
+    #
     # segmented_words = results['segments'][0]['words']
     # for segmented_word_data_dict in segmented_words:
     #     segmented_word: str = segmented_word_data_dict['word']
@@ -148,4 +182,4 @@ if __name__ == '__main__':
 
 
     # plot_mel_spectrogram(audio_to_mel_spectrogram(Path(r"RAVDESS\original_data\Actor_01\03-01-01-01-01-01-01.wav"), top_db=20), SAMPLE_RATE)
-    #train_1channel()
+    train_1channel()
