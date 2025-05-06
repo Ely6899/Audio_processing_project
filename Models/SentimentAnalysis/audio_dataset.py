@@ -36,6 +36,30 @@ class AudioRawData(ABC):
         self._train_data, self._val_data, self._test_data = self._train_val_test_split()
 
    
+    def _train_val_test_split(self, test_size: float=0.2, val_size: float=0.1, random_state=42) -> Tuple[set, set, set]:
+        """
+        Applies stratified train_val_test split.
+        @param test_size: Percentage of test size.
+        @param val_size: Percentage of val size.
+        @param random_state: Put a specific number to ensure determinism.
+        @return: Three sets of Train, Val, Test.
+        """
+        train_paths, temp_paths, train_labels, temp_labels = train_test_split(
+            self._file_paths, self._file_labels, test_size=0.2, stratify=self._file_labels, random_state=random_state
+        )
+
+        # Validation + Test split (50% val, 50% test from temp, making each 10% of total)
+        val_paths, test_paths, val_labels, test_labels = train_test_split(
+            temp_paths, temp_labels, test_size=0.5, stratify=temp_labels, random_state=random_state
+        )
+
+        # Convert back to sets
+        train_set = set(zip(train_paths, train_labels))
+        val_set = set(zip(val_paths, val_labels))
+        test_set = set(zip(test_paths, test_labels))
+
+        return train_set, val_set, test_set
+    
     @abstractmethod
     def _scan_supported_files(self) -> set:
         pass
@@ -110,22 +134,28 @@ class RavdessRawData(AudioRawData):
         # 1)  Build actor lists                                              #
         # ------------------------------------------------------------------ #
         data_root = Path(self._data_root)                # .../Audio_Speech_Actors_01-24
-        actors    = list_actor_dirs(data_root)           # 24 actor folders
-        random.seed(random_state)
-        random.shuffle(actors)
+        actor_dirs    = list_actor_dirs(data_root)           # 24 actor folders
+        """
+        - in order to keep track of the results or noise of a specific speaker , no shuffle 
+        """
+        # random.seed(random_state)
+        # random.shuffle(actor_dirs) 
 
         # How many actors go to TEMP (val + test)?
         temp_fraction = test_size + val_size             # e.g. 0.3  (20 % + 10 %)
-        n_temp = max(1, round(len(actors) * temp_fraction))
-        temp_actor_dirs  = actors[:n_temp]
-        train_actor_dirs = actors[n_temp:]
+        n_temp = max(1, round(len(actor_dirs) * temp_fraction))
+        temp_actor_dirs  = actor_dirs[:n_temp]
+        train_actor_dirs = actor_dirs[n_temp:]
 
         # ------------------------------------------------------------------ #
-        # 2)  Split TEMP 50/50  →  VAL / TEST                                #
+        # 2)  Split TEMP by val_size and test_size  →  VAL / TEST                                #
         # ------------------------------------------------------------------ #
-        half = len(temp_actor_dirs) // 2
-        val_actor_dirs  = temp_actor_dirs[:half]
-        test_actor_dirs = temp_actor_dirs[half:]
+        desired_ratio = val_size / (val_size + test_size)   # 0.1 / 0.3 ≈ 0.333
+        n_val  = max(1, round(len(temp_actor_dirs) * desired_ratio))
+        n_test = len(temp_actor_dirs) - n_val               # remainder
+
+        val_actor_dirs  = temp_actor_dirs[:n_val]
+        test_actor_dirs = temp_actor_dirs[n_val:]
 
         # ------------------------------------------------------------------ #
         # 3)  Collect wav paths                                              #

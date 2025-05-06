@@ -69,16 +69,16 @@ def train_2channel():
 
 
 if __name__ == '__main__':
-    plot_mel_spectrogram(audio_to_mel_spectrogram(Path(r"RAVDESS\original_data\Actor_01\03-01-01-01-01-01-01.wav"), top_db=20), SAMPLE_RATE)
+    # plot_mel_spectrogram(audio_to_mel_spectrogram(Path(r"RAVDESS\original_data\Actor_01\03-01-01-01-01-01-01.wav"), top_db=20), SAMPLE_RATE)
     
-    # """
-    # MICHAL - ADD IN 5.5
-    # """
-    # rav_data = RavdessRawData()
-    # rav_data.print_all_label_counts()
+    """
+    MICHAL - ADD IN 5.5
+    """
+    rav_data = RavdessRawData()
+    rav_data.print_all_label_counts()
 
-    # train_ds = EmotionSpecDataset(rav_data.train_data)
-    # val_ds   = EmotionSpecDataset(rav_data.val_data)
-    # test_ds  = EmotionSpecDataset(rav_data.test_data)
+    train_ds = EmotionSpecDataset(rav_data.train_data)
+    val_ds   = EmotionSpecDataset(rav_data.val_data)
+    test_ds  = EmotionSpecDataset(rav_data.test_data)
     
   
