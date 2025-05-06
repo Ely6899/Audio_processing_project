@@ -8,6 +8,7 @@ from pathlib import Path
 from sklearn.preprocessing import LabelEncoder
 
 from ConstPaths import RavdessPaths, TessPaths
+from Models.SentimentAnalysis.PreprocessParams import MAX_SPECTOGRAM_DURATION_IN_SECONDS
 from Preprocess import audio_to_mel_spectrogram, audio_to_waveform
 import os
 """
@@ -106,9 +107,9 @@ class AudioRawData(ABC):
         print(f"Test label counts: {self.labels_count_test()}")
 
 class RavdessRawData(AudioRawData):
-    def __init__(self, include_calm: bool = False):
+    def __init__(self, raw_data_root = RavdessPaths.AUDIO_ORIGINAL_DATA,include_calm: bool = False):
         self._include_calm = include_calm
-        super().__init__(RavdessPaths.AUDIO_ORIGINAL_DATA, {".wav"})
+        super().__init__(raw_data_root, {".wav"})
         
     
     """
@@ -255,7 +256,7 @@ class TessRawData(AudioRawData):
         return emotion
 
 class EmotionSpecDataset(Dataset):
-    def __init__(self, file_paths: set):
+    def __init__(self, file_paths: set, max_length_in_seconds: float = MAX_SPECTOGRAM_DURATION_IN_SECONDS):
         self._data = list(file_paths)
         self._paths , self._labels = zip(*self._data)
 
@@ -269,6 +270,8 @@ class EmotionSpecDataset(Dataset):
         # Compute class weights
         self.class_weights = self.__compute_class_weights()
 
+        self.max_length_in_seconds = max_length_in_seconds
+
     def __len__(self):
         return len(self._data)
 
@@ -277,7 +280,7 @@ class EmotionSpecDataset(Dataset):
         label = self._labels[idx]
 
         # noam: audio_to_mel_spectrogram returns shape (freq_bins, time_frames)
-        mel_spectrogram = audio_to_mel_spectrogram(file_path=file_path)
+        mel_spectrogram = audio_to_mel_spectrogram(file_path=file_path, max_length_in_seconds=self.max_length_in_seconds)
 
         # Convert to torch.Tensor
         mel_spectrogram = torch.from_numpy(mel_spectrogram).float()
@@ -312,8 +315,6 @@ class EmotionSpecDataset2d(Dataset):
     def __init__(self, data: set):
         self._data = list(data)
         self._paths , self._labels = zip(*self._data)
-
-        #TODO: Add label mapping logic to ensure uniform label naming.
 
 
         self.__label_encoder = LabelEncoder()
