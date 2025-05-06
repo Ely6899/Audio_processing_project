@@ -7,14 +7,14 @@ import torch.nn.functional as F
 
 from PreprocessParams import TARGET_FRAMES, FREQUENCY_BIN_COUNT
 from Visualizations import plot_loss_per_epoch, plot_accuracy_per_epoch, plot_confusion_matrix
-from audio_dataset import EmotionSpecDataset
+from audio_dataset import EmotionSpecDataset, EmotionSpecDataset2d
 
 
 class SentimentModelHandler:
     """
-    Wrapper class for general model hyper-parameters.
+    Wrapper class for general model hyperparameters.
     """
-    def __init__(self, model: nn.Module, train_dataset: EmotionSpecDataset, val_dataset: EmotionSpecDataset, **kwargs):
+    def __init__(self, model: nn.Module, train_dataset: EmotionSpecDataset | EmotionSpecDataset2d, val_dataset: EmotionSpecDataset | EmotionSpecDataset2d, **kwargs):
         self._device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self._model: nn.Module = model
         self._train_dataset: EmotionSpecDataset = train_dataset
@@ -156,6 +156,28 @@ class SentimentModelHandler:
                 f"Criterion: {self._criterion.__class__.__name__}\n"
                 f"Optimizer: {self._optimizer.__class__.__name__}")
 
+    """Properties"""
+
+    @property
+    def model_name(self) -> str:
+        return self._model.__class__.__name__.__str__()
+
+    @property
+    def batch_size(self) -> str:
+        return self._batch_size.__str__()
+
+    @property
+    def starting_lr(self) -> str:
+        return self._lr.__str__()
+
+    @property
+    def criterion(self) -> str:
+        return self._criterion.__class__.__name__.__str__()
+
+    @property
+    def optimizer(self) -> str:
+        return self._optimizer.__class__.__name__.__str__()
+
     def plot_losses(self, file_name: str | None = None):
         file_name = f"{self._model.__class__.__name__}_losses" if None else file_name
         train_losses = [scores[0] for scores in self._train_scores]
@@ -179,6 +201,12 @@ class SentimentModelHandler:
         plot_confusion_matrix(file_save_name=file_name,
                               train_label_data=train_confusion_data,
                               val_label_data=val_confusion_data)
+
+    def save_plots(self):
+        #TODO: Add robust title for plots for easy identification
+        self.plot_accuracies()
+        self.plot_losses()
+        self.plot_confusion_matrix()
 
 
 
