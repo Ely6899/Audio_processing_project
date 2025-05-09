@@ -22,7 +22,7 @@ from pathlib import Path
 import whisper
 
 def train_1channel():
-    ravdess_raw_data = RavdessRawData(raw_data_root=RavdessPaths.DOUBLE_SENTENCE_AUDIO_DATA, include_calm=True)
+    ravdess_raw_data = RavdessRawData(include_calm=True, include_aug=False)
 
     # pprint(ravdess_raw_data.all_data)
 
@@ -30,6 +30,8 @@ def train_1channel():
     train = EmotionSpecDataset(ravdess_raw_data.train_data)
     val = EmotionSpecDataset(ravdess_raw_data.val_data)
 
+    print(f"Train class weights: {train.class_weights}\n"
+          f"Val class weights: {val.class_weights}")
 
     #For testing pre-processing spectrogram
     # mel_spectrogram = audio_to_mel_spectrogram(Path("RAVDESS/Actor_01/03-01-02-02-02-02-01.wav"), normalization_fn=standardization)
@@ -45,22 +47,24 @@ def train_1channel():
     #
     # # train the model:
     try:
-        handler_paper.train_model(epochs = 50, verbose=True)
+        handler_paper.train_model(epochs = 30, verbose=True)
     except KeyboardInterrupt:
         print("Training was interrupted by the user.")
         
     # # save the results in a plot:
-    handler_paper.plot_accuracies("DOUBLE_SENTENCE_RESNET-8-ACC-fixed")
-    handler_paper.plot_losses("DOUBLE_SENTENCE_RESNET-LOSS-fixed")
-    handler_paper.plot_confusion_matrix("DOUBLE_SENTENCE_RESNET-Matrix")
+    handler_paper.plot_accuracies("RESNET-8-NO-AUG-ACC-fixed")
+    handler_paper.plot_losses("RESNET-8-NO-AUG-LOSS-fixed")
+    handler_paper.plot_confusion_matrix("RESNET-8-NO-AUG-Matrix")
 
 def train_2channel():
-    ravdess_neutral_original_data = AudioRawDataWithOriginalNeutral()
-    pprint(ravdess_neutral_original_data.all_data)
+    ravdess_raw_data = RavdessRawDataWithNeutral()
+    #pprint(ravdess_raw_data.all_data)
 
-    # create the dataset with the preprocessing logic:
-    train = EmotionSpecDataset2d(ravdess_neutral_original_data.train_data)
-    val = EmotionSpecDataset2d(ravdess_neutral_original_data.val_data)
+    # # create the dataset with the preprocessing logic:
+    train = EmotionSpecDataset2d(ravdess_raw_data.train_data)
+    val = EmotionSpecDataset2d(ravdess_raw_data.val_data)
+
+    #print(train.__getitem__(2)[0].shape)
     
     # create the model:
     model_paper = ResNetWithAttentionDropOut2d()
@@ -71,17 +75,14 @@ def train_2channel():
     
     # train the model:
     try:
-        handler_paper.train_model(epochs=100, verbose=True)
+        handler_paper.train_model(epochs=50, verbose=True)
     except KeyboardInterrupt:
         print("Training was interrupted by the user.")
         
-    # save the results in a plot:
-    handler_paper.plot_accuracies(f"{model_name}-ACC-fixed")
-    handler_paper.plot_losses(f"{model_name}-LOSS-fixed")
-    handler_paper.plot_confusion_matrix(f"{model_name}-Confusion-Matrix")
-    
-    
-
+    # # save the results in a plot:
+    handler_paper.plot_accuracies(f"{model_name}-SPLIT-SPEAKERS-ACC-fixed")
+    handler_paper.plot_losses(f"{model_name}-SPLIT-SPEAKERS-LOSS-fixed")
+    handler_paper.plot_confusion_matrix(f"{model_name}-SPLIT-SPEAKERS-Confusion-Matrix")
 
 def segment_words_with_timestamps(model: Whisper, file_path_original: Union[str, Path]) -> list[tuple[str, float, float]]:
     #segmentation_model = whisper.load_model("small.en", device="cuda" if torch.cuda.is_available() else "cpu")
@@ -185,15 +186,17 @@ if __name__ == '__main__':
 
 
     # plot_mel_spectrogram(audio_to_mel_spectrogram(Path(r"RAVDESS\original_data\Actor_01\03-01-01-01-01-01-01.wav"), top_db=20), SAMPLE_RATE)
-    
+
     """
     MICHAL - ADD IN 5.5
     """
-    rav_data = RavdessRawData()
-    rav_data.print_all_label_counts()
+    # rav_data = RavdessRawData()
+    # rav_data.print_all_label_counts()
+    # #train_2channel()
+    #
+    # train_ds = EmotionSpecDataset(rav_data.train_data)
+    # val_ds   = EmotionSpecDataset(rav_data.val_data)
+    # test_ds  = EmotionSpecDataset(rav_data.test_data)
 
-    train_ds = EmotionSpecDataset(rav_data.train_data)
-    val_ds   = EmotionSpecDataset(rav_data.val_data)
-    test_ds  = EmotionSpecDataset(rav_data.test_data)
-    
-  
+    train_2channel()
+

@@ -107,8 +107,9 @@ class AudioRawData(ABC):
         print(f"Test label counts: {self.labels_count_test()}")
 
 class RavdessRawData(AudioRawData):
-    def __init__(self, raw_data_root = RavdessPaths.AUDIO_ORIGINAL_DATA,include_calm: bool = False):
+    def __init__(self, raw_data_root = RavdessPaths.AUDIO_ORIGINAL_DATA,include_calm: bool = False, include_aug: bool = True):
         self._include_calm = include_calm
+        self._include_aug = include_aug
         super().__init__(raw_data_root, {".wav"})
         
     
@@ -140,7 +141,7 @@ class RavdessRawData(AudioRawData):
         - in order to keep track of the results or noise of a specific speaker , no shuffle 
         """
         # random.seed(random_state)
-        # random.shuffle(actor_dirs) 
+        # random.shuffle(actor_dirs)
 
         # How many actors go to TEMP (val + test)?
         temp_fraction = test_size + val_size             # e.g. 0.3  (20 % + 10 %)
@@ -158,10 +159,14 @@ class RavdessRawData(AudioRawData):
         val_actor_dirs  = temp_actor_dirs[:n_val]
         test_actor_dirs = temp_actor_dirs[n_val:]
 
+        print(train_actor_dirs)
+        print(val_actor_dirs)
+        print(test_actor_dirs)
+
         # ------------------------------------------------------------------ #
         # 3)  Collect wav paths                                              #
         # ------------------------------------------------------------------ #
-        train_paths = collect_files(train_actor_dirs, include_aug=True)
+        train_paths = collect_files(train_actor_dirs, include_aug=self._include_aug)
         val_paths   = collect_files(val_actor_dirs,   include_aug=False)
         test_paths  = collect_files(test_actor_dirs,  include_aug=False)  # set True if you want augments
 
@@ -313,7 +318,7 @@ class EmotionSpecDataset(Dataset):
 
 class EmotionSpecDataset2d(Dataset):
     def __init__(self, data: set):
-        self._data = list(data)
+        self._data = data
         self._paths , self._labels = zip(*self._data)
 
 
@@ -370,10 +375,12 @@ class EmotionSpecDataset2d(Dataset):
 
 # add RavdessRawData in which every sample is two audio-file-paths: file2classify and originalneutral
 class RavdessRawDataWithNeutral(AudioRawData):
-    def __init__(self):
+    def __init__(self, include_calm = True, include_aug=False):
+        self._include_aug = include_aug
+        self._include_calm = include_calm
         super().__init__(RavdessPaths.ALL_AUDIO_DATA, {".wav"})
 
-    def _scan_supported_files(self) -> set[Tuple[Dict[Path, Path], str]]:
+    def _scan_supported_files(self) -> set[Tuple[Tuple[Path, Path], str]]:
         """
         Scans and saves the file paths of the model and a relevant label based on the index in the name.
         @return: A set of tuples, each tuple holds (file path, label).
@@ -393,6 +400,81 @@ class RavdessRawDataWithNeutral(AudioRawData):
         }
         
         return result
+
+    def __get_emotion_from_index(self, filename):
+        """
+        For RAVDESS, label is indicated in the third number in the name. This function handles mapping it to a
+        readable label.
+        @param filename: File path from RAVDESS dataset.
+        @return: Label of the file according to the index.
+        """
+        numbers = re.findall(r'\d+', filename.name.__str__())
+
+        index_emotion_mapping = {
+            '01': 'neutral',
+            '02': 'neutral' if not self._include_calm else 'calm',
+            '03': 'happy',
+            '04': 'sad',
+            '05': 'angry',
+            '06': 'fearful',
+            '07': 'disgust',
+            '08': 'surprised'
+        }
+
+        emotion_index = numbers[2]
+        emotion = index_emotion_mapping[emotion_index]
+        return emotion
+
+    def _train_val_test_split(self, test_size: float=0.2, val_size: float=0.1, random_state=42) -> Tuple[set, set, set]:
+        # ------------------------------------------------------------------ #
+        # 1)  Build actor lists                                              #
+        # ------------------------------------------------------------------ #
+        data_root = Path(self.original_data)  # .../Audio_Speech_Actors_01-24
+        actor_dirs = list_actor_dirs(data_root)  # 24 actor folders
+        """
+        - in order to keep track of the results or noise of a specific speaker , no shuffle 
+        """
+        # random.seed(random_state)
+        # random.shuffle(actor_dirs)
+
+        # How many actors go to TEMP (val + test)?
+        temp_fraction = test_size + val_size  # e.g. 0.3  (20 % + 10 %)
+        n_temp = max(1, round(len(actor_dirs) * temp_fraction))
+        temp_actor_dirs = actor_dirs[:n_temp]
+        train_actor_dirs = actor_dirs[n_temp:]
+
+        # ------------------------------------------------------------------ #
+        # 2)  Split TEMP by val_size and test_size  →  VAL / TEST            #
+        # ------------------------------------------------------------------ #
+        desired_ratio = val_size / (val_size + test_size)  # 0.1 / 0.3 ≈ 0.333
+        n_val = max(1, round(len(temp_actor_dirs) * desired_ratio))
+        n_test = len(temp_actor_dirs) - n_val  # remainder
+
+        val_actor_dirs = temp_actor_dirs[:n_val]
+        test_actor_dirs = temp_actor_dirs[n_val:]
+
+        print(train_actor_dirs)
+        print(val_actor_dirs)
+        print(test_actor_dirs)
+
+        # ------------------------------------------------------------------ #
+        # 3)  Collect wav paths                                              #
+        # ------------------------------------------------------------------ #
+        train_paths = collect_files(train_actor_dirs, include_aug=self._include_aug)
+        val_paths = collect_files(val_actor_dirs, include_aug=False)
+        test_paths = collect_files(test_actor_dirs, include_aug=False)  # set True if you want augments
+
+        # ------------------------------------------------------------------ #
+        # 4)  Turn them into the expected { (Path, Path, label) } sets             #
+        # ------------------------------------------------------------------ #
+        def label(p: Path) -> str:
+            return self.__get_emotion_from_index(p)
+
+        train_set = {((p, self.get_assosiated_neutral_file(p)), label(p)) for p in train_paths}
+        val_set = {((p, self.get_assosiated_neutral_file(p)), label(p)) for p in val_paths}
+        test_set = {((p, self.get_assosiated_neutral_file(p)), label(p)) for p in test_paths}
+
+        return train_set, val_set, test_set
 
     def get_assosiated_neutral_file(self, file):
         # get audio required attributes
