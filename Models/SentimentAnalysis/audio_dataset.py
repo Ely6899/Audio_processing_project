@@ -136,7 +136,7 @@ class RavdessRawData(AudioRawData):
         # 1)  Build actor lists                                              #
         # ------------------------------------------------------------------ #
         data_root = Path(self._data_root)                # .../Audio_Speech_Actors_01-24
-        actor_dirs    = list_actor_dirs(data_root)           # 24 actor folders
+        actor_dirs = list_actor_dirs(data_root)           # 24 actor folders
         """
         - in order to keep track of the results or noise of a specific speaker , no shuffle 
         """

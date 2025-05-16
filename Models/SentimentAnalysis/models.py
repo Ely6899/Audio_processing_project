@@ -1,3 +1,5 @@
+from typing import Callable
+
 import torch
 import torch.nn as nn
 from torch import optim
@@ -33,8 +35,8 @@ class SentimentModelHandler:
         #print(f"Training set class Weights: {self._class_weights}")
 
         self._criterion = kwargs.get("criterion", nn.CrossEntropyLoss)(weight=self._class_weights.to(self._device))
-        self._optimizer = kwargs.get("optimizer", optim.SGD)(self._model.parameters(), lr=self._lr, momentum=0.9, weight_decay=1e-6)
-        self._scheduler = kwargs.get("scheduler", optim.lr_scheduler.MultiStepLR)(self._optimizer, milestones=[10, 20], gamma=0.1)
+        self._optimizer = kwargs.get("optimizer", optim.SGD)(self._model.parameters(), lr=self._lr, weight_decay=1e-6)
+        self._scheduler = kwargs.get("scheduler", optim.lr_scheduler.MultiStepLR)(self._optimizer, milestones=[30], gamma=0.1)
 
         self._training_logs: dict = dict()
 
@@ -178,6 +180,10 @@ class SentimentModelHandler:
     def optimizer(self) -> str:
         return self._optimizer.__class__.__name__.__str__()
 
+    def __generate_plot_title(self) -> str:
+        return (f"{self.model_name}_"
+                f"")
+
     def plot_losses(self, file_name: str | None = None):
         file_name = f"{self._model.__class__.__name__}_losses" if None else file_name
         train_losses = [scores[0] for scores in self._train_scores]
@@ -207,283 +213,6 @@ class SentimentModelHandler:
         self.plot_accuracies()
         self.plot_losses()
         self.plot_confusion_matrix()
-
-
-
-class EmotionClassifier0(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.conv = nn.Conv2d(1, 32, kernel_size=3, stride=1, padding=1)
-        self.relu = nn.ReLU()
-        self.fc = nn.Linear(32 * TARGET_FRAMES * FREQUENCY_BIN_COUNT, 8)
-
-    def forward(self, x):
-        x = self.conv(x)
-        x = self.relu(x)
-        x = x.view(x.size(0), -1)
-        x = self.fc(x)
-        return x
-
-class EmotionClassifier1(nn.Module):
-    def __init__(self):
-        super().__init__()
-
-        # First convolution layer
-        self.conv1 = nn.Conv2d(1, 32, kernel_size=3, stride=1, padding=1)
-        self.relu1 = nn.ReLU()
-
-        # Second convolution layer
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)
-        self.relu2 = nn.ReLU()
-
-        # Third convolution layer
-        self.conv3 = nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1)
-        self.relu3 = nn.ReLU()
-
-        # Pooling layer to reduce spatial dimensions
-        self.pool = nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
-
-        # Fully connected layer
-        self.fc = nn.Linear(128 * (TARGET_FRAMES // 2) * (FREQUENCY_BIN_COUNT // 2), 8)  # Update the input size based on pooling
-
-    def forward(self, x):
-        # Apply first convolution layer
-        x = self.conv1(x)
-        x = self.relu1(x)
-
-        # Apply second convolution layer
-        x = self.conv2(x)
-        x = self.relu2(x)
-
-        # Apply third convolution layer
-        x = self.conv3(x)
-        x = self.relu3(x)
-
-        # Apply pooling layer
-        x = self.pool(x)
-
-        # Flatten the output before passing to the fully connected layer
-        x = x.view(x.size(0), -1)
-
-        # Fully connected layer
-        x = self.fc(x)
-
-        return x
-
-class EmotionClassifier2(nn.Module):
-    def __init__(self):
-        super().__init__()
-
-        # First convolution layer with BatchNorm
-        self.conv1 = nn.Conv2d(1, 32, kernel_size=3, stride=1, padding=1)
-        self.bn1 = nn.BatchNorm2d(32)
-        self.relu1 = nn.ReLU()
-
-        # Residual stack with 10 filters
-        self.residual_stack = nn.Sequential(
-            nn.Conv2d(32, 10, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(10),
-            nn.ReLU(),
-            nn.Conv2d(10, 32, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(32)
-        )
-
-        # Pooling layer to reduce spatial dimensions
-        self.pool = nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
-
-        # Fully connected layer
-        self.fc = nn.Linear(32 * (TARGET_FRAMES // 2) * (FREQUENCY_BIN_COUNT // 2), 8)
-
-    def forward(self, x):
-        # Apply first convolution layer
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.relu1(x)
-
-        # Apply residual stack
-        residual = x  # Save input for residual connection
-        x = self.residual_stack(x)
-        x += residual  # Add residual connection
-        x = torch.relu(x)  # Apply ReLU after residual addition
-
-        # Apply pooling layer
-        x = self.pool(x)
-
-        # Flatten the output before passing to the fully connected layer
-        x = x.view(x.size(0), -1)
-
-        # Fully connected layer
-        x = self.fc(x)
-
-        return x
-
-class EmotionClassifier3(nn.Module):
-    def __init__(self):
-        super().__init__()
-        # First convolution layer with BatchNorm and Dropout
-        self.conv1 = nn.Conv2d(1, 16, kernel_size=3, stride=1, padding=1)
-        self.bn1 = nn.BatchNorm2d(32)
-        self.relu1 = nn.ReLU()
-        self.dropout1 = nn.Dropout(p=0.3)
-
-        # Residual stack
-        self.residual_stack = nn.Sequential(
-            nn.Conv2d(16, 64, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(64),
-            nn.ReLU(),
-            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(64)
-        )
-
-        # Pooling layer to reduce spatial dimensions
-        self.pool = nn.AdaptiveAvgPool2d(1)
-
-        # Fully connected layer
-        self.fc = nn.Linear(64, 8)
-
-    def forward(self, x):
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.relu1(x)
-        x = self.dropout1(x)
-
-        residual = x  # Save input for residual connection
-        x = self.residual_stack(x)
-        x += residual  # Add residual connection
-        x = torch.relu(x)
-
-        x = self.pool(x)
-        x = x.view(x.size(0), -1)
-        x = self.fc(x)
-        return x
-
-class ModelWithAttention(nn.Module):
-    def __init__(self):
-        super(ModelWithAttention, self).__init__()
-        # Define layers
-        self.conv1 = nn.Conv2d(in_channels=1, out_channels=64, kernel_size=3, padding=1)  # Adjusted in_channels to 1
-        self.bn1 = nn.BatchNorm2d(64)
-        self.relu1 = nn.ReLU()
-
-        self.residual_stack = nn.Sequential(
-            nn.Conv2d(64, 64, kernel_size=3, padding=1),
-            nn.BatchNorm2d(64),
-            nn.ReLU(),
-            nn.Conv2d(64, 64, kernel_size=3, padding=1),
-            nn.BatchNorm2d(64)
-        )
-
-        # Attention mechanism
-        self.attention = nn.Conv2d(64, 1, kernel_size=1)  # Reduce to 1 channel for attention weights
-
-        self.pool = nn.AdaptiveAvgPool2d((1, 1))  # Global pooling
-        self.fc = nn.Linear(64, 8)  # Fully connected for 10 classes
-
-    def forward(self, x):
-        # Apply first convolution layer
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.relu1(x)
-
-        # Apply residual stack
-        residual = x  # Save input for residual connection
-        x = self.residual_stack(x)
-        x += residual  # Add residual connection
-        x = torch.relu(x)  # Apply ReLU after residual addition
-
-        # Apply attention head
-        attention_weights = torch.sigmoid(self.attention(x))  # Compute attention weights
-        x = x * attention_weights  # Apply attention to the feature map
-
-        # Apply pooling layer
-        x = self.pool(x)
-
-        # Flatten the output before passing to the fully connected layer
-        x = x.view(x.size(0), -1)
-
-        # Fully connected layer
-        x = self.fc(x)
-
-        return x
-
-class RavdessPaperModel(nn.Module):
-    def __init__(self):
-        super(RavdessPaperModel, self).__init__()
-        self.conv2 = nn.Conv2d(in_channels=1, out_channels=64, kernel_size=5, padding='same')
-        self.dropout = nn.Dropout(0.2)
-        self.fc = None  # Will define the fully connected layer dynamically
-
-    def forward(self, x):
-        # x.shape is (batch_size, num_channels, sequence_length)
-        x = self.conv2(x)  # After Conv1D: (batch_size, out_channels, sequence_length)
-        x = F.relu(x)
-        x = self.dropout(x)
-
-        # Flatten the output for the fully connected layer (batch_size, -1)
-        x = x.view(x.size(0), -1)
-
-        # Define the fully connected layer dynamically based on output shape after conv1
-        if self.fc is None:
-            # Calculate the shape dynamically
-            conv_out_shape = x.shape[1]
-            self.fc = nn.Linear(conv_out_shape, 8).to("cuda")  # Define the fc layer for dynamic shape
-
-        x = self.fc(x)
-        return x
-
-
-class ResidualBlock(nn.Module):
-    def __init__(self, in_channels, out_channels):
-        super(ResidualBlock, self).__init__()
-        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1, bias=False)
-        self.bn1 = nn.BatchNorm2d(out_channels)
-        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1, bias=False)
-        self.bn2 = nn.BatchNorm2d(out_channels)
-
-        # Skip connection
-        self.skip = nn.Sequential()
-        if in_channels != out_channels:
-            self.skip = nn.Sequential(
-                nn.Conv2d(in_channels, out_channels, kernel_size=1, bias=False),
-                nn.BatchNorm2d(out_channels)
-            )
-
-    def forward(self, x):
-        identity = self.skip(x)
-        out = torch.relu(self.bn1(self.conv1(x)))
-        out = self.bn2(self.conv2(out))
-        out += identity
-        return torch.relu(out)
-
-
-#NOTE: Too slow for unknown reason.
-class ResidualModel(nn.Module):
-    def __init__(self):
-        super(ResidualModel, self).__init__()
-        self.initial_conv = nn.Conv2d(1, 32, kernel_size=3, padding=1, bias=False)
-        self.initial_bn = nn.BatchNorm2d(32)
-
-        self.residual_stack1 = ResidualBlock(32, 64)
-        self.residual_stack2 = ResidualBlock(64, 64)
-        self.residual_stack3 = ResidualBlock(64, 64)
-
-        self.flatten = nn.Flatten()
-        self.fc1 = nn.Linear(64 * TARGET_FRAMES * FREQUENCY_BIN_COUNT, 128)  # Assuming 8x8 feature maps after Conv layers
-        self.fc2 = nn.Linear(128, 64)
-
-        self.output_layer = nn.Linear(64, 8)
-
-    def forward(self, x):
-        x = torch.relu(self.initial_bn(self.initial_conv(x)))
-        x = self.residual_stack1(x)
-        x = self.residual_stack2(x)
-        x = self.residual_stack3(x)
-
-        x = self.flatten(x)
-        x = torch.relu(self.fc1(x))
-        x = torch.relu(self.fc2(x))
-        return self.output_layer(x)
-
 
 
 """Emo-Net Logic"""
@@ -824,4 +553,82 @@ class ResNetWithAttentionDropOut2d(nn.Module):
         return x
 
 
+"""New Simplified models"""
 
+class BasicConvBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1):
+        super(BasicConvBlock, self).__init__()
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding=1)
+        self.bn = nn.BatchNorm2d(out_channels)
+        self.relu = nn.Tanh()
+
+    def forward(self, x):
+        return self.relu(self.bn(self.conv(x)))
+
+class BasicFcBlock(nn.Module):
+    def __init__(self, input_size: int, output_size: int, activation_function: Callable, include_dropout: bool, dropout_rate: float = 0.3):
+        super(BasicFcBlock, self).__init__()
+        self.fc = nn.Linear(input_size, output_size)
+        self.bn_fc = nn.BatchNorm1d(output_size)
+        self.activation_function = activation_function()
+        self._include_dropout = include_dropout
+        self.dropout = nn.Dropout(dropout_rate)
+
+    def forward(self, x):
+        x = self.activation_function(self.bn_fc(self.fc(x)))
+        return self.dropout(x) if self._include_dropout else x
+
+
+class SentimentModelAttentionDropOut(nn.Module):
+    def __init__(self, dual_channel = False, num_classes=8, include_dropout = True, include_attention = False):
+        super(SentimentModelAttentionDropOut, self).__init__()
+        self._include_dropout = include_dropout
+        self._include_attention = include_attention
+
+        self.conv1 = BasicConvBlock(1 if not dual_channel else 2, 32)
+        #self.conv2 = BasicConvBlock(32, 64)
+        self.pool = nn.AdaptiveAvgPool2d((8, 8))
+        #self.conv3 = BasicConvBlock(64, 128)
+
+
+        # Attention layer (Self-Attention)
+        if self._include_attention:
+            self.attention = nn.MultiheadAttention(embed_dim=32, num_heads=4, batch_first=True)
+
+        # Final batch normalization and ReLU
+        #self.bn2 = nn.BatchNorm2d(64)
+        #self.relu = nn.ReLU()
+
+        # Fully connected layers (FC layers)
+        self.fc1 = BasicFcBlock(32 * 8 * 8, 256, nn.Tanh, include_dropout=self._include_dropout, dropout_rate=0.6)
+        self.fc2 = BasicFcBlock(256, 128, nn.Tanh, include_dropout=self._include_dropout, dropout_rate=0.6)
+        self.fc3 = BasicFcBlock(128, 64, nn.Tanh, include_dropout=self._include_dropout, dropout_rate=0.6)
+
+        # Output layer (final classification layer)
+        self.fc_out = nn.Linear(64, num_classes)
+
+    def forward(self, x):
+        # Initial convolution
+        x = self.conv1(x)
+        #x = self.conv2(x)
+
+        #x = self.conv3(x)
+
+        x = self.pool(x)
+
+        # Apply attention
+        if self._include_attention:
+            batch_size, channels, height, width = x.size()
+            x = x.view(batch_size, channels, -1).transpose(1, 2)  # Flatten the spatial dimensions
+            x, _ = self.attention(x, x, x)
+            x = x.transpose(1, 2).view(batch_size, channels, height, width)  # Reshape back to 4D
+
+        x = x.reshape(x.size(0), -1)   # Flatten
+
+        x = self.fc1(x)
+        x = self.fc2(x)
+        x = self.fc3(x)
+
+        x = self.fc_out(x)
+
+        return x
