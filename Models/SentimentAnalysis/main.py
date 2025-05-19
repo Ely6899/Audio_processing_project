@@ -5,6 +5,8 @@ from pprint import pprint
 from Preprocess import audio_to_mel_spectrogram, standardization
 from PreprocessParams import SAMPLE_RATE
 from Visualizations import plot_loss_per_epoch, plot_accuracy_per_epoch, plot_confusion_matrix, plot_mel_spectrogram
+from Visualizations import hparams_to_str
+from HyperParams import HPARAM_ALIASES
 from pathlib import Path
 
 def train_1channel():
@@ -67,4 +69,20 @@ def train_2channel():
 
 if __name__ == '__main__':
     # plot_mel_spectrogram(audio_to_mel_spectrogram(Path(r"RAVDESS\original_data\Actor_01\03-01-01-01-01-01-01.wav"), top_db=20), SAMPLE_RATE)
+   
     train_1channel()
+    # model_paper = ResNetWithAttentionDropOut2d()
+    # ravdess_raw_data = RavdessRawData()
+    # train = EmotionSpecDataset2d(ravdess_raw_data.train_data)
+    # val = EmotionSpecDataset2d(ravdess_raw_data.val_data)
+    
+    # tag = hparams_to_str(model_paper.hparams, keys=["lr", "bs", "epochs"])
+    # dummy = {"lr": 1e-4, "bs": 32, "epochs": 10}
+    # print(hparams_to_str(dummy, keys=["lr", "bs", "epochs"]))
+    # handler = SentimentModelHandler(model_paper,train,val,batch_size=32, learning_rate=0.001)
+    # print(handler.hparams)
+    # print(hparams_to_str(handler.hparams))
+    # tag = hparams_to_str(handler.hparams, alias_map=HPARAM_ALIASES)
+    # print(tag)
+
+# => lr0_0001_bs32_epochs50
