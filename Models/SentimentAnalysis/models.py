@@ -9,6 +9,13 @@ from PreprocessParams import TARGET_FRAMES, FREQUENCY_BIN_COUNT
 from Visualizations import plot_loss_per_epoch, plot_accuracy_per_epoch, plot_confusion_matrix
 from audio_dataset import EmotionSpecDataset
 
+"""
+for extracting meta-data for organized plot savings
+"""
+import inspect
+from collections import OrderedDict
+from typing import Any
+
 
 class SentimentModelHandler:
     """
@@ -45,6 +52,21 @@ class SentimentModelHandler:
         # New lists to store the true labels and predicted labels for confusion matrix(Of both train and validation).
         self._true_labels_train, self._true_labels_val = [], []
         self._pred_labels_train, self._pred_labels_val = [], []
+
+        """
+        for extracting meta-data for organized plot savings
+        """
+        # 1) Keep the hyper-parameters exactly as passed
+        self.hparams: OrderedDict[str, Any] = OrderedDict(kwargs)
+         # 2) Optional – auto-collect the *model* constructor kwargs
+        sig = inspect.signature(self._model.__class__.__init__)
+        ctor_args = {
+            k: v.default
+            for k, v in sig.parameters.items()
+            if k != "self" and v.default is not inspect._empty
+        }
+        self.hparams.update({f"model_{k}": v for k, v in ctor_args.items()})
+        
 
 
     def __train_one_epoch(self):
@@ -161,6 +183,7 @@ class SentimentModelHandler:
         train_losses = [scores[0] for scores in self._train_scores]
         val_losses = [scores[0] for scores in self._val_scores]
         plot_loss_per_epoch(file_save_name= file_name,
+                            hparams=self.hparams,              # ← lives in the handler
                             training_loss=train_losses,
                             validation_loss=val_losses)
 
@@ -169,6 +192,7 @@ class SentimentModelHandler:
         train_accuracies = [scores[1] for scores in self._train_scores]
         val_accuracies = [scores[1] for scores in self._val_scores]
         plot_accuracy_per_epoch(file_save_name=file_name,
+                                hparams=self.hparams,              # ← lives in the handler
                             training_accuracy=train_accuracies,
                             validation_accuracy=val_accuracies)
 
@@ -177,6 +201,7 @@ class SentimentModelHandler:
         train_confusion_data = (self._true_labels_train, self._pred_labels_train, self._train_class_names)
         val_confusion_data = (self._true_labels_val, self._pred_labels_val, self._val_class_names)
         plot_confusion_matrix(file_save_name=file_name,
+                              hparams=self.hparams,              # ← lives in the handler
                               train_label_data=train_confusion_data,
                               val_label_data=val_confusion_data)
 

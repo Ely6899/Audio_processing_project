@@ -1,5 +1,6 @@
 import os.path
-from typing import Tuple, Optional
+from typing import Tuple, Optional,Any, Iterable
+
 
 import librosa.display
 from matplotlib import pyplot as plt
@@ -9,6 +10,53 @@ from sklearn.metrics import confusion_matrix
 import seaborn as sns
 from ConstPaths import ProjectPaths
 
+""" 
+for extracting meta-data for organized plot savings
+"""
+import re
+from pathlib import Path
+from typing import Any
+from HyperParams import HPARAM_ALIASES
+
+""" 
+for extracting meta-data for organized plot savings
+"""
+def hparams_to_str(
+    hparams: dict[str, Any],
+    *,
+    keys: list[str] | None = None,
+    alias_map: dict[str, str] | None = None,
+) -> str:
+    """
+    Convert selected hyper-parameters to a filesystem-safe tag.
+    If `alias_map` is given, the key is replaced by alias_map[key].
+
+    Example:
+        >>> hparams = {"learning_rate": 1e-3, "batch_size": 32, "epochs": 50}
+        >>> hparams_to_str(hparams)
+        'lr0_001_bs32_ep50'
+    """
+    alias_map = alias_map or {}
+    keys = keys or list(hparams.keys())
+
+    parts: list[str] = []
+
+    for k in keys:
+        if k not in hparams:
+            continue                     # silent skip if key not present
+        v = hparams[k]
+
+        # replace long key by short alias if available
+        alias = alias_map.get(k, k)
+
+        # canonicalise the value → string safe for filenames
+        if isinstance(v, bool):
+            v = int(v)
+        safe_v = re.sub(r"[^\w\-]", "_", str(v))
+
+        parts.append(f"{alias}{safe_v}")
+
+    return "_".join(parts)
 
 def plot_waveform(waveform, sample_rate):
     # Plot each channel separately
@@ -43,7 +91,12 @@ def plot_mel_spectrogram(mel_spec, sr):
     plt.tight_layout()
     plt.show()
 
-def plot_loss_per_epoch(file_save_name: str, **kwargs):
+def plot_loss_per_epoch(
+                        file_save_name: str,
+                        hparams: dict[str, Any] | None = None,
+                        keys: Iterable[str] | None = None, # you don’t have to supply keys at all. It’s there only if you want to override the default order or filter the list.
+                        **kwargs
+                        ):    # NEW → controls order
     training_loss = kwargs.get("training_loss", None)
     validation_loss = kwargs.get("validation_loss", None)
 
@@ -64,9 +117,18 @@ def plot_loss_per_epoch(file_save_name: str, **kwargs):
         plt.legend()
         plt.grid(True)
         os.makedirs(ProjectPaths.MODEL_RESULTS, exist_ok=True)
-        plt.savefig(os.path.join(ProjectPaths.MODEL_RESULTS, f"{file_save_name}.png"))
+        # ---------- NEW saving logic ---------- #
+        tag = hparams_to_str(hparams or {}, keys=keys,alias_map=HPARAM_ALIASES)
+        fname = f"{file_save_name}_{tag}.png"
+        plt.savefig(os.path.join(ProjectPaths.MODEL_RESULTS, fname), bbox_inches="tight")
+        # -------------------------------------- #
+        # plt.savefig(os.path.join(ProjectPaths.MODEL_RESULTS, f"{file_save_name}.png"))
 
-def plot_accuracy_per_epoch(file_save_name: str, **kwargs):
+def plot_accuracy_per_epoch(
+    file_save_name: str,
+    hparams: dict[str, Any] | None = None,
+    keys: Iterable[str] | None = None,
+    **kwargs):
     training_accuracy = kwargs.get("training_accuracy", None)
     validation_accuracy = kwargs.get("validation_accuracy", None)
 
@@ -88,9 +150,18 @@ def plot_accuracy_per_epoch(file_save_name: str, **kwargs):
         plt.legend()
         plt.grid(True)
         os.makedirs(ProjectPaths.MODEL_RESULTS, exist_ok=True)
-        plt.savefig(os.path.join(ProjectPaths.MODEL_RESULTS, f"{file_save_name}.png"))
+        # ---------- NEW saving logic ---------- #
+        tag = hparams_to_str(hparams or {}, keys=keys, alias_map=HPARAM_ALIASES)
+        fname = f"{file_save_name}_{tag}.png"
+        plt.savefig(os.path.join(ProjectPaths.MODEL_RESULTS, fname), bbox_inches="tight")
+        # -------------------------------------- #
+        # plt.savefig(os.path.join(ProjectPaths.MODEL_RESULTS, f"{file_save_name}.png"))
 
-def plot_confusion_matrix(file_save_name: str, **kwargs):
+def plot_confusion_matrix(
+    file_save_name: str,
+    hparams: dict[str, Any] | None = None,
+    keys: Iterable[str] | None = None,
+    **kwargs):
     train_values_data: Optional[Tuple[list, list, list]]= kwargs.get("train_label_data")
     val_values_data: Optional[Tuple[list, list, list]] = kwargs.get("val_label_data")
 
@@ -135,5 +206,9 @@ def plot_confusion_matrix(file_save_name: str, **kwargs):
         ax.set_ylabel("True Label")
 
     plt.tight_layout()
-
-    plt.savefig(os.path.join(ProjectPaths.MODEL_RESULTS, f"{file_save_name}.png"))
+    
+    # ---------- NEW saving logic ---------- #
+    tag = hparams_to_str(hparams or {}, keys=keys, alias_map=HPARAM_ALIASES)
+    fname = f"{file_save_name}_{tag}.png"
+    plt.savefig(os.path.join(ProjectPaths.MODEL_RESULTS, fname), bbox_inches="tight")
+    # plt.savefig(os.path.join(ProjectPaths.MODEL_RESULTS, f"{file_save_name}.png"))
