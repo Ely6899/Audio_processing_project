@@ -9,6 +9,7 @@ import numpy as np
 from sklearn.metrics import confusion_matrix
 import seaborn as sns
 from ConstPaths import ProjectPaths
+from PreprocessParams import HOP_LENGTH, SAMPLE_RATE
 
 """ 
 for extracting meta-data for organized plot savings
@@ -75,7 +76,7 @@ def plot_waveform(waveform, sample_rate):
     plt.tight_layout()
     plt.show()
 
-def plot_mel_spectrogram(mel_spec, sr):
+def plot_mel_spectrogram(mel_spec, sr=SAMPLE_RATE, hop_length=HOP_LENGTH):
     """
     Plot a mel spectrogram.
     """
@@ -83,7 +84,7 @@ def plot_mel_spectrogram(mel_spec, sr):
         mel_spec = mel_spec.squeeze().numpy()  # Remove extra dimensions and convert to NumPy
 
     plt.figure(figsize=(10, 4))
-    librosa.display.specshow(mel_spec, sr=sr, x_axis='off', y_axis='mel', cmap='inferno', fmax=sr//2)
+    librosa.display.specshow(mel_spec, sr=sr, hop_length=hop_length, x_axis='time', y_axis='mel', cmap='inferno', fmax=sr//2)
     plt.colorbar(format='%+2.0f dB')
     plt.title('Mel Spectrogram')
     plt.xlabel('Time (s)')

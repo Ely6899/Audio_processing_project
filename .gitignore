@@ -27,3 +27,5 @@ Model Results/
 # dataset folders
 RAVDESS
 TESS
+
+*.png

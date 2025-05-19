@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 from typing import Callable
 
@@ -6,8 +7,6 @@ import numpy as np
 import torch.nn.functional
 
 from PreprocessParams import *
-
-import logging
 
 # Create a logger object
 logger = logging.getLogger(__name__)
