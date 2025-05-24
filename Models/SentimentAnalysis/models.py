@@ -42,8 +42,8 @@ class SentimentModelHandler:
         #print(f"Training set class Weights: {self._class_weights}")
 
         self._criterion = kwargs.get("criterion", nn.CrossEntropyLoss)(weight=self._class_weights.to(self._device))
-        self._optimizer = kwargs.get("optimizer", optim.SGD)(self._model.parameters(), lr=self._lr, weight_decay=1e-6)
-        self._scheduler = kwargs.get("scheduler", optim.lr_scheduler.MultiStepLR)(self._optimizer, milestones=[30], gamma=0.1)
+        self._optimizer = kwargs.get("optimizer", optim.SGD)(self._model.parameters(), momentum = 0.9, lr=self._lr, weight_decay=1e-6)
+        #self._scheduler = kwargs.get("scheduler", None)()
 
         self._training_logs: dict = dict()
 
@@ -94,15 +94,13 @@ class SentimentModelHandler:
             loss.backward()
             self._optimizer.step()
 
-            running_loss += loss.item()
+            running_loss += loss.item() * mel_spec.size(0)
 
             predictions = output.argmax(1)
             correct += (predictions == label).sum().item()
 
             self._true_labels_train.extend(label.cpu().numpy())
             self._pred_labels_train.extend(predictions.cpu().numpy())
-
-        self._scheduler.step()
 
         total_samples = len(self._train_loader.dataset)
 
@@ -127,7 +125,7 @@ class SentimentModelHandler:
                 output = self._model(mel_spec)
                 loss = self._criterion(output, label)
 
-                running_loss += loss.item()
+                running_loss += loss.item() * mel_spec.size(0)
 
                 predictions = output.argmax(1)
                 correct += (predictions == label).sum().item()
@@ -136,6 +134,7 @@ class SentimentModelHandler:
                 self._pred_labels_val.extend(predictions.cpu().numpy())
 
         total_samples = len(self._val_loader.dataset)
+        #self._scheduler.step(running_loss / total_samples)
         return running_loss / total_samples, correct, total_samples
 
     def train_model(self, epochs: int = 10, verbose: bool = False):
@@ -308,34 +307,34 @@ class ResNetWithAttention(nn.Module):
         super(ResNetWithAttention, self).__init__()
 
         # Initial convolutional block
-        self.conv1 = nn.Conv2d(1, 32, kernel_size=3, stride=1, padding=1)
-        self.bn1 = nn.BatchNorm2d(32)
+        self.conv1 = nn.Conv2d(1, 8, kernel_size=3, stride=1, padding=1)
+        self.bn1 = nn.BatchNorm2d(8)
 
         # First submodule with 64 filters
-        self.module1 = ResNetModule(32, 64, num_blocks=2, stride=2)
+        self.module1 = ResNetModule(8, 16, num_blocks=2, stride=2)
 
         # Second submodule with 128 filters
-        self.module2 = ResNetModule(64, 128, num_blocks=2, stride=2)
+        self.module2 = ResNetModule(16, 32, num_blocks=2, stride=2)
 
         # Third submodule with 256 filters
-        self.module3 = ResNetModule(128, 256, num_blocks=2, stride=2)
+        self.module3 = ResNetModule(32, 64, num_blocks=2, stride=2)
 
         # Attention layer (Self-Attention)
-        self.attention = nn.MultiheadAttention(embed_dim=256, num_heads=8, batch_first=True)
+        #self.attention = nn.MultiheadAttention(embed_dim=256, num_heads=8, batch_first=True)
 
         # Final batch normalization and ReLU
-        self.bn2 = nn.BatchNorm2d(256)
+        self.bn2 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU()
 
         # Fully connected layers (FC layers)
-        self.fc1 = nn.Linear(256 * (TARGET_FRAMES // 8) * (FREQUENCY_BIN_COUNT // 8), 1024)  # Assuming input size (32x32)
-        self.bn_fc1 = nn.BatchNorm1d(1024)
+        self.fc1 = nn.Linear(64 * (TARGET_FRAMES // 8) * (FREQUENCY_BIN_COUNT // 8), 64)  # Assuming input size (32x32)
+        self.bn_fc1 = nn.BatchNorm1d(64)
 
-        self.fc2 = nn.Linear(1024, 512)
-        self.bn_fc2 = nn.BatchNorm1d(512)
+        self.fc2 = nn.Linear(64, 32)
+        self.bn_fc2 = nn.BatchNorm1d(32)
 
         # Output layer (final classification layer)
-        self.fc_out = nn.Linear(512, num_classes)
+        self.fc_out = nn.Linear(32, num_classes)
 
     def forward(self, x):
         # Initial convolution
@@ -349,8 +348,8 @@ class ResNetWithAttention(nn.Module):
         # Apply attention
         batch_size, channels, height, width = x.size()
         x = x.view(batch_size, channels, -1).transpose(1, 2)  # Flatten the spatial dimensions
-        x, _ = self.attention(x, x, x)
-        x = x.transpose(1, 2).view(batch_size, channels, height, width)  # Reshape back to 4D
+        #x, _ = self.attention(x, x, x)
+        #x = x.transpose(1, 2).view(batch_size, channels, height, width)  # Reshape back to 4D
 
         # Final batch normalization and ReLU activation
         x = self.relu(self.bn2(x))
@@ -374,36 +373,36 @@ class ResNetWithAttentionDropOut(nn.Module):
         super(ResNetWithAttentionDropOut, self).__init__()
 
         # Initial convolutional block
-        self.conv1 = nn.Conv2d(1, 32, kernel_size=3, stride=1, padding=1)
-        self.bn1 = nn.BatchNorm2d(32)
+        self.conv1 = nn.Conv2d(1, 8, kernel_size=3, stride=1, padding=1)
+        self.bn1 = nn.BatchNorm2d(8)
 
         # First submodule with 64 filters
-        self.module1 = ResNetModule(32, 64, num_blocks=2, stride=2)
+        self.module1 = ResNetModule(8, 16, num_blocks=2, stride=2)
 
         # Second submodule with 128 filters
-        self.module2 = ResNetModule(64, 128, num_blocks=2, stride=2)
+        self.module2 = ResNetModule(16, 32, num_blocks=2, stride=2)
 
         # Third submodule with 256 filters
-        self.module3 = ResNetModule(128, 256, num_blocks=2, stride=2)
+        self.module3 = ResNetModule(32, 64, num_blocks=2, stride=2)
 
         # Attention layer (Self-Attention)
-        self.attention = nn.MultiheadAttention(embed_dim=256, num_heads=8, batch_first=True)
+        self.attention = nn.MultiheadAttention(embed_dim=64, num_heads=8, batch_first=True)
 
         # Final batch normalization and ReLU
-        self.bn2 = nn.BatchNorm2d(256)
+        self.bn2 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU()
 
         # Fully connected layers (FC layers)
-        self.fc1 = nn.Linear(256 * (TARGET_FRAMES // 8) * (FREQUENCY_BIN_COUNT // 8), 1024)  # Assuming input size (32x32)
-        self.bn_fc1 = nn.BatchNorm1d(1024)
+        self.fc1 = nn.Linear(64 * (TARGET_FRAMES // 8) * (FREQUENCY_BIN_COUNT // 8), 256)  # Assuming input size (32x32)
+        self.bn_fc1 = nn.BatchNorm1d(256)
         self.dropout1 = nn.Dropout(0.6)
 
-        self.fc2 = nn.Linear(1024, 512)
-        self.bn_fc2 = nn.BatchNorm1d(512)
+        self.fc2 = nn.Linear(256, 128)
+        self.bn_fc2 = nn.BatchNorm1d(128)
         self.dropout2 = nn.Dropout(0.6)
 
         # Output layer (final classification layer)
-        self.fc_out = nn.Linear(512, num_classes)
+        self.fc_out = nn.Linear(128, num_classes)
 
     def forward(self, x):
         # Initial convolution

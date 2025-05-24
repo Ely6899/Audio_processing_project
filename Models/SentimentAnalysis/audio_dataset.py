@@ -118,8 +118,8 @@ class RavdessRawData(AudioRawData):
     """
     def _train_val_test_split(
         self,
-        test_size: float = 0.2,     # overall test share (relative to *all* data)
-        val_size:  float = 0.1,     # overall val  share
+        test_size: float = 0.0,     # overall test share (relative to *all* data)
+        val_size:  float = 0.3,     # overall val  share
         random_state: int = 42,
     ) -> Tuple[Set[tuple], Set[tuple], Set[tuple]]:
         """
@@ -179,6 +179,11 @@ class RavdessRawData(AudioRawData):
         train_set = {(p, label(p)) for p in train_paths}
         val_set   = {(p, label(p)) for p in val_paths}
         test_set  = {(p, label(p)) for p in test_paths}
+
+        if not (train_set.isdisjoint(val_set) and
+                train_set.isdisjoint(test_set) and
+                val_set.isdisjoint(test_set)):
+            raise ValueError("Train, validation, and test sets are not mutually disjoint.")
 
         return train_set, val_set, test_set
 
@@ -301,6 +306,10 @@ class EmotionSpecDataset(Dataset):
     def class_names(self):
         return self._class_names
 
+    @property
+    def class_counts(self):
+        return self._class_counts
+
     def decode_label(self, encoded_label):
         return self.__label_encoder.inverse_transform([encoded_label])[0]
 
@@ -312,6 +321,7 @@ class EmotionSpecDataset(Dataset):
             torch.Tensor: Tensor of class weights (inverse frequency).
         """
         class_counts = torch.bincount(self._labels, minlength=self.num_classes)
+        self._class_counts = class_counts
         total_samples = len(self._labels)
         class_weights = total_samples / (class_counts + 1e-6)  # Avoid division by zero
         return class_weights.float()
@@ -425,7 +435,7 @@ class RavdessRawDataWithNeutral(AudioRawData):
         emotion = index_emotion_mapping[emotion_index]
         return emotion
 
-    def _train_val_test_split(self, test_size: float=0.2, val_size: float=0.1, random_state=42) -> Tuple[set, set, set]:
+    def _train_val_test_split(self, test_size: float=0.0, val_size: float=0.3, random_state=42) -> Tuple[set, set, set]:
         # ------------------------------------------------------------------ #
         # 1)  Build actor lists                                              #
         # ------------------------------------------------------------------ #

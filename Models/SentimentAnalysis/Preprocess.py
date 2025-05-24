@@ -84,7 +84,7 @@ def audio_to_mel_spectrogram(file_path: Path,
     waveform, sample_rate = audio_to_waveform(file_path, sample_rate)
 
     waveform = trim_silence(waveform, top_db=top_db)
-    #waveform = librosa.effects.preemphasis(waveform)
+    waveform = librosa.effects.preemphasis(waveform)
 
     mel_spectrogram = librosa.feature.melspectrogram(y=waveform,
                                                      sr=sample_rate,
@@ -93,7 +93,7 @@ def audio_to_mel_spectrogram(file_path: Path,
                                                      win_length = window_length,
                                                      hop_length = hop_length,
                                                      power=2.0,
-                                                     center=False,
+                                                     center=True,
                                                      )
 
     if resizing:
@@ -128,8 +128,8 @@ def resize_spectrogram_to_max_duration(spectrogram, max_duration_seconds, sample
     """
 
     # compute the target number of frames
-    max_sumples = int(max_duration_seconds * sample_rate)
-    target_frames = (max_sumples - win_length) // hop_length + 1
+    max_samples = int(max_duration_seconds * sample_rate)
+    target_frames = (max_samples - win_length) // hop_length + 1
 
     if spectrogram.shape[1] > target_frames: # Truncate
         logger.debug("Applied truncation")
