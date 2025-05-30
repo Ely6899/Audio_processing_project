@@ -8,28 +8,40 @@ import soundfile as sf
 import torch.cuda
 import whisper
 from whisper import Whisper
+from transformers import pipeline
 
 from ConstPaths import RavdessPaths
+from Models.SentimentAnalysis.audio_dataset import CREMARawData, AllRawData
+from Models.SentimentAnalysis.models import MlpModel
 from PreprocessParams import SAMPLE_RATE
-from audio_dataset import EmotionSpecDataset, RavdessRawData, RavdessRawDataWithNeutral, EmotionSpecDataset2d
+from audio_dataset import EmotionSpecDataset, RavdessRawData, EmotionSpecDataset2d
 from models import ResNetWithAttentionDropOut2d, ResNetWithAttention, ResNetWithAttentionDropOut
-from models import SentimentModelHandler, SentimentModelAttentionDropOut
+from models import SentimentModelHandler, SentimentModelAttentionDropOut, ResNetWithAttention2d
 
 
 def train_1channel():
     ravdess_raw_data = RavdessRawData(include_calm=True, include_aug=False)
+    crema_raw_data = CREMARawData()
+
+    ravdess_raw_data.print_all_label_counts()
+    crema_raw_data.print_all_label_counts()
+
+    all_data = AllRawData((ravdess_raw_data, crema_raw_data))
+    print(len(all_data.all_data))
+    print(len(all_data.train_data))
+    print(len(all_data.val_data))
+
+    print(all_data.print_all_label_counts())
+
 
     # pprint(ravdess_raw_data.all_data)
 
     # create the dataset with the preprocessing logic:
-    train = EmotionSpecDataset(ravdess_raw_data.train_data)
-    val = EmotionSpecDataset(ravdess_raw_data.val_data)
+    # train = EmotionWavDataset(ravdess_raw_data.train_data)
+    # val = EmotionWavDataset(ravdess_raw_data.val_data)
 
-    print(f"Train class counts: {train.class_counts}\n"
-          f"Val class counts: {val.class_counts}")
-
-    print(f"Train class weights: {train.class_weights}\n"
-          f"Val class weights: {val.class_weights}")
+    # print(train.class_counts)
+    # print(val.class_counts)
 
     #For testing pre-processing spectrogram
     # mel_spectrogram = audio_to_mel_spectrogram(Path("RAVDESS/Actor_01/03-01-02-02-02-02-01.wav"), normalization_fn=standardization)
@@ -37,22 +49,22 @@ def train_1channel():
 
 
     # # create the model:
-    model_paper = ResNetWithAttentionDropOut(num_classes=8)
-
+    # model_paper = MlpModel(num_classes=8)
     #
-    # # create the handler:
-    handler_paper = SentimentModelHandler(model_paper, train, val, batch_size=16, learning_rate=0.001)
-    #
-    # # train the model:
-    try:
-        handler_paper.train_model(epochs = 50, verbose=True)
-    except KeyboardInterrupt:
-        print("Training was interrupted by the user.")
+    # #
+    # # # create the handler:
+    # handler_paper = SentimentModelHandler(model_paper, train, val, batch_size=16, learning_rate=0.001)
+    # #
+    # # # train the model:
+    # try:
+    #     handler_paper.train_model(epochs = 50, verbose=True)
+    # except KeyboardInterrupt:
+    #     print("Training was interrupted by the user.")
         
     # # save the results in a plot:
-    handler_paper.plot_accuracies("SINGLE-SENTENCE-RESNET-SGD-70-30-ACC")
-    handler_paper.plot_losses("SINGLE-SENTENCE-RESNET-SGD-70-30-LOSS")
-    handler_paper.plot_confusion_matrix("SINGLE-SENTENCE-RESNET-SGD-70-30-Matrix")
+    #handler_paper.plot_accuracies("SINGLE-SENTENCE-MLP-SGD-70-30-no-split-dropout-ACC")
+    #handler_paper.plot_losses("SINGLE-SENTENCE-MLP-SGD-70-30-no-split-dropout-LOSS")
+    #handler_paper.plot_confusion_matrix("SINGLE-SENTENCE-MLP-SGD-70-30-no-split-dropout-Matrix")
 
 def train_2channel():
     ravdess_raw_data = RavdessRawDataWithNeutral()
@@ -65,22 +77,22 @@ def train_2channel():
     #print(train.__getitem__(2)[0].shape)
     
     # create the model:
-    model_paper = ResNetWithAttentionDropOut2d()
+    model_paper = ResNetWithAttention2d()
     model_name = model_paper.__class__.__name__
     
     # create the handler:
-    handler_paper = SentimentModelHandler(model_paper, train, val, batch_size=32, learning_rate=0.001)
+    handler_paper = SentimentModelHandler(model_paper, train, val, batch_size=16, learning_rate=0.001)
     
     # train the model:
     try:
-        handler_paper.train_model(epochs=30, verbose=True)
+        handler_paper.train_model(epochs=50, verbose=True)
     except KeyboardInterrupt:
         print("Training was interrupted by the user.")
         
     # # save the results in a plot:
-    handler_paper.plot_accuracies(f"DEPTH-MODEL-SGD-70-30-ACC")
-    handler_paper.plot_losses(f"DEPTH-MODEL-SGD-70-30-LOSS")
-    handler_paper.plot_confusion_matrix(f"DEPTH-MODEL-SGD-70-30-Confusion-Matrix")
+    handler_paper.plot_accuracies(f"DEPTH-MODEL-SGD-70-30-no-split-ACC")
+    handler_paper.plot_losses(f"DEPTH-MODEL-SGD-70-30-no-split-LOSS")
+    handler_paper.plot_confusion_matrix(f"DEPTH-MODEL-SGD-70-30--no-split-Confusion-Matrix")
 
 def segment_words_with_timestamps(model: Whisper, file_path_original: Union[str, Path]) -> list[tuple[str, float, float]]:
     #segmentation_model = whisper.load_model("small.en", device="cuda" if torch.cuda.is_available() else "cpu")
@@ -195,5 +207,5 @@ if __name__ == '__main__':
     # train_ds = EmotionSpecDataset(rav_data.train_data)
     # val_ds   = EmotionSpecDataset(rav_data.val_data)
     # test_ds  = EmotionSpecDataset(rav_data.test_data)
-
     train_1channel()
+
