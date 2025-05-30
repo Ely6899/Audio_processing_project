@@ -40,14 +40,33 @@ def get_actor_id(filename: str):
         return actor_id
     
 def get_sentence_type(filename: str):
-    return
+    if filename.endswith(".wav"):
+        parts = filename.replace(".wav", "").split("_")
+        if len(parts) != 4:
+            return   # skip malformed filenames
+        
+        sentence_type = parts[1]
+        return sentence_type
+
 
 def get_emotion(filename: str):
-    return
-    
+    if filename.endswith(".wav"):
+        parts = filename.replace(".wav", "").split("_")
+        if len(parts) != 4:
+            return   # skip malformed filenames
+        
+        emotion = emotion_map.get(parts[2], parts[2])
+        return emotion
+
 def get_emotion_intensity(filename: str):
-    return
-    
+    if filename.endswith(".wav"):
+        parts = filename.replace(".wav", "").split("_")
+        if len(parts) != 4:
+            return   # skip malformed filenames
+        
+        intensity = intensity_map.get(parts[3], parts[3])
+        return intensity
+
 def extract_crema_d_metadata_to_df(audio_dir: str, save_path: str = None) -> pd.DataFrame:
     """
     Extracts metadata from CREMA-D .wav filenames.
