@@ -1,6 +1,5 @@
 import re
 from abc import ABC, abstractmethod
-from collections import Counter as LabelCounter
 from pathlib import Path
 from typing import Any, AnyStr
 from typing import Tuple
@@ -129,12 +128,11 @@ class AllRawData:
     def __init__(self, raw_datasets: tuple[AudioRawData, ...]):
         sets_of_data = (raw_dataset.all_data for raw_dataset in raw_datasets)
         self._all_raw_data = set().union(*sets_of_data)
+        self._train_data, self._val_data = None, None
 
-        self._train_data, self._val_data = self.__train_val_test_split()
-
-    def __train_val_test_split(self, val_ratio: float = 0.3):
-        train_data, val_data = train_test_split(list(self._all_raw_data), test_size=val_ratio, stratify=[label for _, label in self._all_raw_data], random_state=42)
-        return train_data, val_data
+    def train_val_test_split(self, val_ratio: float = 0.3):
+        self._train_data, self._val_data = train_test_split(list(self._all_raw_data), test_size=val_ratio, stratify=[label for _, label in self._all_raw_data], random_state=42)
+        return self._train_data, self._val_data
 
     @property
     def all_data(self) -> set[tuple[Path, Any]]:
@@ -156,11 +154,8 @@ class AllRawData:
               f"Labels train: {label_counts_train}\n"
               f"Labels validation: {label_counts_val}")
 
-    #TODO: Noam complete this method pretty pls :)
-    def remove_label(self, label_list: list[str]) -> set[tuple[Path, Any]]:
-        pass
-
-
+    def remove_labels(self, label_list: tuple[str] = ('surprised', 'calm')) -> None:
+        self._all_raw_data = set(((file_name, label) for file_name, label in self._all_raw_data if label not in label_list))
 
 
 class EmotionSpecDataset(Dataset):

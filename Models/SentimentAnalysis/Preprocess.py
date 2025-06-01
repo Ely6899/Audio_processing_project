@@ -67,7 +67,7 @@ def audio_to_mel_spectrogram(file_path: Path,
                             max_length_in_seconds: float = MAX_SPECTOGRAM_DURATION_IN_SECONDS,
                             resizing = True,
                             top_db: int = TOP_DB,
-                            normalization_fn: Callable[[np.ndarray], np.ndarray] = standardization):
+                            normalization_fn: Callable[[np.ndarray], np.ndarray] = None):
     """
     Given audio file path, extracts its waveform and from it creates a mel-spectrogram.
     @param resizing: True if you wish to resize the spectrogram to a fixed length.
@@ -107,7 +107,7 @@ def audio_to_mel_spectrogram(file_path: Path,
 
     mel_spectrogram = librosa.power_to_db(mel_spectrogram, ref=np.max)
 
-    mel_spectrogram = normalization_fn(mel_spectrogram)
+    #mel_spectrogram = normalization_fn(mel_spectrogram)
 
     return mel_spectrogram
 

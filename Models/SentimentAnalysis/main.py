@@ -5,18 +5,14 @@ from typing import Union
 import librosa
 import numpy as np
 import soundfile as sf
-import torch.cuda
 import whisper
 from whisper import Whisper
-from transformers import pipeline
 
 from ConstPaths import RavdessPaths
 from Models.SentimentAnalysis.audio_dataset import CREMARawData, AllRawData
-from Models.SentimentAnalysis.models import MlpModel
 from PreprocessParams import SAMPLE_RATE
-from audio_dataset import EmotionSpecDataset, RavdessRawData, EmotionSpecDataset2d
-from models import ResNetWithAttentionDropOut2d, ResNetWithAttention, ResNetWithAttentionDropOut
-from models import SentimentModelHandler, SentimentModelAttentionDropOut, ResNetWithAttention2d
+from audio_dataset import RavdessRawData, EmotionSpecDataset
+from models import SentimentModelHandler, ResNetWithAttention
 
 
 def train_1channel():
@@ -27,18 +23,22 @@ def train_1channel():
     crema_raw_data.print_all_label_counts()
 
     all_data = AllRawData((ravdess_raw_data, crema_raw_data))
-    print(len(all_data.all_data))
-    print(len(all_data.train_data))
-    print(len(all_data.val_data))
+    all_data.remove_labels()
 
-    print(all_data.print_all_label_counts())
+    train_set, val_set = all_data.train_val_test_split(0.2)
+
+    # print(len(all_data.all_data))
+    # print(len(train_set))
+    # print(len(val_set))
+    #
+    # print(all_data.print_all_label_counts())
 
 
     # pprint(ravdess_raw_data.all_data)
 
     # create the dataset with the preprocessing logic:
-    # train = EmotionWavDataset(ravdess_raw_data.train_data)
-    # val = EmotionWavDataset(ravdess_raw_data.val_data)
+    train_ds = EmotionSpecDataset(train_set)
+    val_ds = EmotionSpecDataset(val_set)
 
     # print(train.class_counts)
     # print(val.class_counts)
@@ -49,22 +49,22 @@ def train_1channel():
 
 
     # # create the model:
-    # model_paper = MlpModel(num_classes=8)
+    model_paper = ResNetWithAttention(num_classes=6)
     #
     # #
     # # # create the handler:
-    # handler_paper = SentimentModelHandler(model_paper, train, val, batch_size=16, learning_rate=0.001)
+    handler_paper = SentimentModelHandler(model_paper, train_ds, val_ds, batch_size=64, learning_rate=0.001)
     # #
     # # # train the model:
-    # try:
-    #     handler_paper.train_model(epochs = 50, verbose=True)
-    # except KeyboardInterrupt:
-    #     print("Training was interrupted by the user.")
+    try:
+        handler_paper.train_model(epochs = 50, verbose=True)
+    except KeyboardInterrupt:
+        print("Training was interrupted by the user.")
         
     # # save the results in a plot:
-    #handler_paper.plot_accuracies("SINGLE-SENTENCE-MLP-SGD-70-30-no-split-dropout-ACC")
-    #handler_paper.plot_losses("SINGLE-SENTENCE-MLP-SGD-70-30-no-split-dropout-LOSS")
-    #handler_paper.plot_confusion_matrix("SINGLE-SENTENCE-MLP-SGD-70-30-no-split-dropout-Matrix")
+    handler_paper.plot_accuracies("SINGLE-SENTENCE-COMBINED-SGD-70-30-no-split-dropout-ACC")
+    handler_paper.plot_losses("SINGLE-SENTENCE-COMBINED-SGD-70-30-no-split-dropout-LOSS")
+    handler_paper.plot_confusion_matrix("SINGLE-SENTENCE-COMBINED-SGD-70-30-no-split-dropout-Matrix")
 
 def train_2channel():
     ravdess_raw_data = RavdessRawDataWithNeutral()
