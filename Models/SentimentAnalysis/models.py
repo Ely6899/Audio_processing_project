@@ -18,12 +18,27 @@ import inspect
 from collections import OrderedDict
 from typing import Any
 
+from results_manager import ResultsManager
+from ConstPaths import ProjectPaths
 
 class SentimentModelHandler:
     """
     Wrapper class for general model hyperparameters.
     """
-    def __init__(self, model: nn.Module, train_dataset: EmotionSpecDataset | EmotionSpecDataset2d, val_dataset: EmotionSpecDataset | EmotionSpecDataset2d, **kwargs):
+class SentimentModelHandler:
+    def __init__(
+        self,
+        model,
+        train_dataset,
+        val_dataset,
+        raw_data_class_name: str,
+        **kwargs,
+    ):
+                
+        # ------------------------------------------------------------------
+        # 1. Regular initialisation
+        # ------------------------------------------------------------------
+
         self._device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self._model: nn.Module = model
         self._train_dataset: EmotionSpecDataset = train_dataset
@@ -69,6 +84,24 @@ class SentimentModelHandler:
         }
         self.hparams.update({f"model_{k}": v for k, v in ctor_args.items()})
         
+
+        # ------------------------------------------------------------------
+        # 2. Create run-specific results directory
+        # ------------------------------------------------------------------
+        self._results = ResultsManager(
+            model_class=model.__class__.__name__,
+            raw_data_class=raw_data_class_name,
+            dataset_class=train_dataset.__class__.__name__,
+            user_notes=kwargs.get("run_notes"),
+        )
+
+        # ------------------------------------------------------------------
+        # 3. **Monkey-patch** the constant once per run
+        # ------------------------------------------------------------------
+        ProjectPaths.MODEL_RESULTS = self._results.base_dir   # <- this line
+        #            ^^^^^^^^^^^^^ constant in ConstPaths.py
+        #                              ^^^^^^^^^^^^^^^^^^^^^ absolute path like
+        #                              training_results/ResNet/.../<timestamp>
 
 
     def __train_one_epoch(self):
