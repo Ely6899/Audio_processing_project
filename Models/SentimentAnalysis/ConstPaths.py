@@ -2,9 +2,6 @@ import os.path
 from enum import EnumType
 from pathlib import Path
 
-class ProjectPaths(EnumType):
-    MODEL_RESULTS = Path(os.path.join("Model Results"))
-
 class MeldPaths(EnumType):
     AUDIO_FILES_DATA = Path(os.path.join("wav_splits"))
     TRAIN_DATA_CSV = Path(os.path.join("train.csv"))
@@ -20,6 +17,7 @@ class RavdessPaths(EnumType):
     TXT_FOR_DEEPFAKE_PATH = Path(os.path.join(ALL_AUDIO_DATA, "txt_for_deepfake"))
     WORD_CHUNKED_AUDIO_DATA = Path(os.path.join(ALL_AUDIO_DATA, "chunked_word_audio"))
     DOUBLE_SENTENCE_AUDIO_DATA = Path(os.path.join(ALL_AUDIO_DATA, "double_sentence_audio"))
+
 class CremaPaths(EnumType):
     ALL_AUDIO_DATA = Path(os.path.join("CREMA-D"))
     WAV_DATA = Path(os.path.join(ALL_AUDIO_DATA, 'AudioWAV'))
