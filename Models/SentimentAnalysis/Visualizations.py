@@ -8,7 +8,6 @@ import torch
 import numpy as np
 from sklearn.metrics import confusion_matrix
 import seaborn as sns
-from ConstPaths import ProjectPaths
 from PreprocessParams import HOP_LENGTH, SAMPLE_RATE
 
 """ 
@@ -94,6 +93,7 @@ def plot_mel_spectrogram(mel_spec, sr=SAMPLE_RATE, hop_length=HOP_LENGTH):
 
 def plot_loss_per_epoch(
                         file_save_name: str,
+                        dir_path: Path,
                         hparams: dict[str, Any] | None = None,
                         keys: Iterable[str] | None = None, # you don’t have to supply keys at all. It’s there only if you want to override the default order or filter the list.
                         **kwargs
@@ -117,16 +117,16 @@ def plot_loss_per_epoch(
         plt.title('Training and Validation Loss per Epoch')
         plt.legend()
         plt.grid(True)
-        os.makedirs(ProjectPaths.MODEL_RESULTS, exist_ok=True)
+        os.makedirs(dir_path, exist_ok=True)
         # ---------- NEW saving logic ---------- #
         tag = hparams_to_str(hparams or {}, keys=keys,alias_map=HPARAM_ALIASES)
         fname = f"{file_save_name}_{tag}.png"
-        plt.savefig(os.path.join(ProjectPaths.MODEL_RESULTS, fname), bbox_inches="tight")
+        plt.savefig(os.path.join(dir_path, fname), bbox_inches="tight")
         # -------------------------------------- #
-        # plt.savefig(os.path.join(ProjectPaths.MODEL_RESULTS, f"{file_save_name}.png"))
 
 def plot_accuracy_per_epoch(
     file_save_name: str,
+    dir_path: Path,
     hparams: dict[str, Any] | None = None,
     keys: Iterable[str] | None = None,
     **kwargs):
@@ -150,16 +150,16 @@ def plot_accuracy_per_epoch(
         plt.ylim(0, 100)
         plt.legend()
         plt.grid(True)
-        os.makedirs(ProjectPaths.MODEL_RESULTS, exist_ok=True)
+        os.makedirs(dir_path, exist_ok=True)
         # ---------- NEW saving logic ---------- #
         tag = hparams_to_str(hparams or {}, keys=keys, alias_map=HPARAM_ALIASES)
         fname = f"{file_save_name}_{tag}.png"
-        plt.savefig(os.path.join(ProjectPaths.MODEL_RESULTS, fname), bbox_inches="tight")
+        plt.savefig(os.path.join(dir_path, fname), bbox_inches="tight")
         # -------------------------------------- #
-        # plt.savefig(os.path.join(ProjectPaths.MODEL_RESULTS, f"{file_save_name}.png"))
 
 def plot_confusion_matrix(
     file_save_name: str,
+    dir_path: Path,
     hparams: dict[str, Any] | None = None,
     keys: Iterable[str] | None = None,
     **kwargs):
@@ -208,8 +208,8 @@ def plot_confusion_matrix(
 
     plt.tight_layout()
     
+    os.makedirs(dir_path, exist_ok=True)
     # ---------- NEW saving logic ---------- #
     tag = hparams_to_str(hparams or {}, keys=keys, alias_map=HPARAM_ALIASES)
     fname = f"{file_save_name}_{tag}.png"
-    plt.savefig(os.path.join(ProjectPaths.MODEL_RESULTS, fname), bbox_inches="tight")
-    # plt.savefig(os.path.join(ProjectPaths.MODEL_RESULTS, f"{file_save_name}.png"))
+    plt.savefig(os.path.join(dir_path, fname), bbox_inches="tight")

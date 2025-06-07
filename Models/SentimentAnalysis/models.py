@@ -19,7 +19,6 @@ from collections import OrderedDict
 from typing import Any
 
 from results_manager import ResultsManager
-from ConstPaths import ProjectPaths
 
 class SentimentModelHandler:
     """
@@ -94,14 +93,6 @@ class SentimentModelHandler:
             dataset_class=train_dataset.__class__.__name__,
             user_notes=kwargs.get("run_notes"),
         )
-
-        # ------------------------------------------------------------------
-        # 3. **Monkey-patch** the constant once per run
-        # ------------------------------------------------------------------
-        ProjectPaths.MODEL_RESULTS = self._results.base_dir   # <- this line
-        #            ^^^^^^^^^^^^^ constant in ConstPaths.py
-        #                              ^^^^^^^^^^^^^^^^^^^^^ absolute path like
-        #                              training_results/ResNet/.../<timestamp>
 
 
     def __train_one_epoch(self):
@@ -242,28 +233,34 @@ class SentimentModelHandler:
         file_name = f"{self._model.__class__.__name__}_losses" if None else file_name
         train_losses = [scores[0] for scores in self._train_scores]
         val_losses = [scores[0] for scores in self._val_scores]
+        self._results.create_directory()
         plot_loss_per_epoch(file_save_name= file_name,
                             hparams=self.hparams,              # ← lives in the handler
                             training_loss=train_losses,
-                            validation_loss=val_losses)
+                            validation_loss=val_losses,
+                            dir_path=self._results.base_dir)
 
     def plot_accuracies(self, file_name: str | None = None):
         file_name = f"{self._model.__class__.__name__}_accuracies" if None else file_name
         train_accuracies = [scores[1] for scores in self._train_scores]
         val_accuracies = [scores[1] for scores in self._val_scores]
+        self._results.create_directory()
         plot_accuracy_per_epoch(file_save_name=file_name,
                                 hparams=self.hparams,              # ← lives in the handler
                             training_accuracy=train_accuracies,
-                            validation_accuracy=val_accuracies)
+                            validation_accuracy=val_accuracies,
+                            dir_path=self._results.base_dir)
 
     def plot_confusion_matrix(self, file_name: str | None = None):
         file_name = f"{self._model.__class__.__name__}_confusion_matrix" if None else file_name
         train_confusion_data = (self._true_labels_train, self._pred_labels_train, self._train_class_names)
         val_confusion_data = (self._true_labels_val, self._pred_labels_val, self._val_class_names)
+        self._results.create_directory()
         plot_confusion_matrix(file_save_name=file_name,
                               hparams=self.hparams,              # ← lives in the handler
                               train_label_data=train_confusion_data,
-                              val_label_data=val_confusion_data)
+                              val_label_data=val_confusion_data,
+                              dir_path=self._results.base_dir)
 
     def save_plots(self):
         #TODO: Add robust title for plots for easy identification
@@ -353,7 +350,7 @@ class ResNetWithAttention(nn.Module):
         self.module3 = ResNetModule(32, 64, num_blocks=2, stride=2)
 
         # Attention layer (Self-Attention)
-        #self.attention = nn.MultiheadAttention(embed_dim=256, num_heads=8, batch_first=True)
+        # self.attention = nn.MultiheadAttention(embed_dim=256, num_heads=8, batch_first=True)
 
         # Final batch normalization and ReLU
         self.bn2 = nn.BatchNorm2d(64)
@@ -380,9 +377,9 @@ class ResNetWithAttention(nn.Module):
 
         # Apply attention
         batch_size, channels, height, width = x.size()
-        x = x.view(batch_size, channels, -1).transpose(1, 2)  # Flatten the spatial dimensions
-        #x, _ = self.attention(x, x, x)
-        #x = x.transpose(1, 2).view(batch_size, channels, height, width)  # Reshape back to 4D
+        # x = x.view(batch_size, channels, -1).transpose(1, 2)  # Flatten the spatial dimensions
+        # x, _ = self.attention(x, x, x)
+        # x = x.transpose(1, 2).view(batch_size, channels, height, width)  # Reshape back to 4D
 
         # Final batch normalization and ReLU activation
         x = self.relu(self.bn2(x))

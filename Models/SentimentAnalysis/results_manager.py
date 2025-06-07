@@ -55,8 +55,15 @@ class ResultsManager:
         run_time: Optional[datetime] = None,
         user_notes: Optional[str] = None,
     ) -> None:
+        
+        self.model_class = model_class
+        self.raw_data_class = raw_data_class
+        self.dataset_class = dataset_class
+        self.root = root
         self.run_time = run_time or datetime.now()
-
+        self.user_notes = user_notes
+        
+        
         # Build the directory tree we want → …/training_results/Model/RawData/Dataset/2025‑06‑03_14‑57‑22
         self.base_dir: Path = (
             Path(root)
@@ -65,10 +72,15 @@ class ResultsManager:
             / dataset_class
             / self.run_time.strftime("%Y-%m-%d_%H-%M-%S")
         )
+    
+    def create_directory(self) -> None:
+        """Create the run directory and write the training info file."""
+        # if directory already exists, do nothing
+        if self.base_dir.exists():
+            return
         self.base_dir.mkdir(parents=True, exist_ok=True)
-
         # A small text file with run meta‑data (and optional user notes)
-        self._write_training_info(model_class, raw_data_class, dataset_class, user_notes)
+        self._write_training_info(self.model_class, self.raw_data_class, self.dataset_class, self.user_notes)
 
     # ------------------------------------------------------------------ #
     #  Public helpers                                                    #
