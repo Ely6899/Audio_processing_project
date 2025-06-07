@@ -9,9 +9,9 @@ import soundfile as sf
 import numpy as np
 
 
-from Models.SentimentAnalysis.ConstPaths import RavdessPaths
-from Models.SentimentAnalysis.PreprocessParams import SAMPLE_RATE
-from Models.SentimentAnalysis.neutral_gen import (get_actor_number_value,
+from ConstPaths import RavdessPaths
+from PreprocessParams import SAMPLE_RATE
+from neutral_gen import (get_actor_number_value,
                                                   get_statement_number_value,
                                                   get_repetition_number_value)
 

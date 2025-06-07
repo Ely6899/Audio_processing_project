@@ -11,7 +11,7 @@ from sklearn.preprocessing import LabelEncoder
 from torch.utils.data import Dataset
 
 from ConstPaths import RavdessPaths, CremaPaths
-from Models.SentimentAnalysis.PreprocessParams import MAX_SPECTOGRAM_DURATION_IN_SECONDS
+from PreprocessParams import MAX_SPECTOGRAM_DURATION_IN_SECONDS
 from Preprocess import audio_to_mel_spectrogram
 
 
