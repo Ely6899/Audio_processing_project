@@ -1,15 +1,16 @@
+from pathlib import Path
 from typing import Callable
 
 import torch
 import torch.nn as nn
 from torch import optim
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 import torch.nn.functional as F
 
 from PreprocessParams import TARGET_FRAMES, FREQUENCY_BIN_COUNT
 from Visualizations import plot_loss_per_epoch, plot_accuracy_per_epoch, plot_confusion_matrix
-from audio_dataset import EmotionSpecDataset, EmotionSpecDataset2d
+from audio_dataset import EmotionSpecDataset
 
 """
 for extracting meta-data for organized plot savings
@@ -24,7 +25,6 @@ class SentimentModelHandler:
     """
     Wrapper class for general model hyperparameters.
     """
-class SentimentModelHandler:
     def __init__(
         self,
         model,
@@ -33,7 +33,7 @@ class SentimentModelHandler:
         raw_data_class_name: str,
         **kwargs,
     ):
-                
+
         # ------------------------------------------------------------------
         # 1. Regular initialisation
         # ------------------------------------------------------------------
@@ -53,11 +53,11 @@ class SentimentModelHandler:
         self._val_loader: DataLoader = DataLoader(self._val_dataset, self._batch_size, shuffle=False)
 
         self._class_weights = train_dataset.class_weights
-        #print(f"Training set class Weights: {self._class_weights}")
+        print(f"Training set class Weights: {self._class_weights}")
 
         self._criterion = kwargs.get("criterion", nn.CrossEntropyLoss)(weight=self._class_weights.to(self._device))
-        self._optimizer = kwargs.get("optimizer", optim.SGD)(self._model.parameters(), momentum = 0.9, lr=self._lr, weight_decay=1e-6)
-        #self._scheduler = kwargs.get("scheduler", None)()
+        self._optimizer = kwargs.get("optimizer", optim.SGD)(self._model.parameters(), lr=self._lr, momentum=0.9, weight_decay=1e-6)
+        self._scheduler = kwargs.get("scheduler", optim.lr_scheduler.MultiStepLR)(self._optimizer, milestones=[int(0.33 * 100), int(0.66 * 100)], gamma=0.1)
 
         self._training_logs: dict = dict()
 
@@ -126,6 +126,7 @@ class SentimentModelHandler:
             self._true_labels_train.extend(label.cpu().numpy())
             self._pred_labels_train.extend(predictions.cpu().numpy())
 
+        self._scheduler.step()
         total_samples = len(self._train_loader.dataset)
 
         return running_loss / total_samples, correct, total_samples
@@ -158,10 +159,9 @@ class SentimentModelHandler:
                 self._pred_labels_val.extend(predictions.cpu().numpy())
 
         total_samples = len(self._val_loader.dataset)
-        #self._scheduler.step(running_loss / total_samples)
         return running_loss / total_samples, correct, total_samples
 
-    def train_model(self, epochs: int = 10, verbose: bool = False):
+    def train_model(self, epochs: int = 10, verbose: bool = False, save_model: bool = False):
         """
         Applies the entire training logic and saves the results.
         @param epochs: Number of epochs to train the model. Defaults to 10.
@@ -195,6 +195,9 @@ class SentimentModelHandler:
                 print(f"Epoch {epoch + 1}")
                 print(results_string)
                 print("--------------------------------\n")
+
+        if save_model:
+            torch.save(self._model, Path(f"{self._model.__class__.__name__}.pt"), _use_new_zipfile_serialization=True)
 
     def __str__(self):
         return (f"Model name: {self._model.__class__.__name__}\n"
@@ -337,34 +340,34 @@ class ResNetWithAttention(nn.Module):
         super(ResNetWithAttention, self).__init__()
 
         # Initial convolutional block
-        self.conv1 = nn.Conv2d(1, 8, kernel_size=3, stride=1, padding=1)
-        self.bn1 = nn.BatchNorm2d(8)
+        self.conv1 = nn.Conv2d(1, 32, kernel_size=3, stride=1, padding=1)
+        self.bn1 = nn.BatchNorm2d(32)
 
         # First submodule with 64 filters
-        self.module1 = ResNetModule(8, 16, num_blocks=2, stride=2)
+        self.module1 = ResNetModule(32, 64, num_blocks=2, stride=2)
 
         # Second submodule with 128 filters
-        self.module2 = ResNetModule(16, 32, num_blocks=2, stride=2)
+        self.module2 = ResNetModule(64, 128, num_blocks=2, stride=2)
 
         # Third submodule with 256 filters
-        self.module3 = ResNetModule(32, 64, num_blocks=2, stride=2)
+        self.module3 = ResNetModule(128, 256, num_blocks=2, stride=2)
 
         # Attention layer (Self-Attention)
-        # self.attention = nn.MultiheadAttention(embed_dim=256, num_heads=8, batch_first=True)
+        self.attention = nn.MultiheadAttention(embed_dim=256, num_heads=8, batch_first=True)
 
         # Final batch normalization and ReLU
-        self.bn2 = nn.BatchNorm2d(64)
+        self.bn2 = nn.BatchNorm2d(256)
         self.relu = nn.ReLU()
 
         # Fully connected layers (FC layers)
-        self.fc1 = nn.Linear(64 * (TARGET_FRAMES // 8) * (FREQUENCY_BIN_COUNT // 8), 64)  # Assuming input size (32x32)
-        self.bn_fc1 = nn.BatchNorm1d(64)
+        self.fc1 = nn.Linear(256 * (TARGET_FRAMES // 8) * (FREQUENCY_BIN_COUNT // 8), 1024)  # Assuming input size (32x32)
+        self.bn_fc1 = nn.BatchNorm1d(1024)
 
-        self.fc2 = nn.Linear(64, 32)
-        self.bn_fc2 = nn.BatchNorm1d(32)
+        self.fc2 = nn.Linear(1024, 512)
+        self.bn_fc2 = nn.BatchNorm1d(512)
 
         # Output layer (final classification layer)
-        self.fc_out = nn.Linear(32, num_classes)
+        self.fc_out = nn.Linear(512, num_classes)
 
     def forward(self, x):
         # Initial convolution
@@ -377,9 +380,9 @@ class ResNetWithAttention(nn.Module):
 
         # Apply attention
         batch_size, channels, height, width = x.size()
-        # x = x.view(batch_size, channels, -1).transpose(1, 2)  # Flatten the spatial dimensions
-        # x, _ = self.attention(x, x, x)
-        # x = x.transpose(1, 2).view(batch_size, channels, height, width)  # Reshape back to 4D
+        x = x.view(batch_size, channels, -1).transpose(1, 2)  # Flatten the spatial dimensions
+        x, _ = self.attention(x, x, x)
+        x = x.transpose(1, 2).view(batch_size, channels, height, width)  # Reshape back to 4D
 
         # Final batch normalization and ReLU activation
         x = self.relu(self.bn2(x))
