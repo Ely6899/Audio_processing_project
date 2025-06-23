@@ -213,3 +213,50 @@ def plot_confusion_matrix(
     tag = hparams_to_str(hparams or {}, keys=keys, alias_map=HPARAM_ALIASES)
     fname = f"{file_save_name}_{tag}.png"
     plt.savefig(os.path.join(dir_path, fname), bbox_inches="tight")
+  
+def save_mel_spectrogram(
+    mel_spec, 
+    file_save_path: Path,
+    hparams: dict[str, Any] | None = None,
+    keys: Iterable[str] | None = None,
+    sr=SAMPLE_RATE, 
+    hop_length=HOP_LENGTH
+):
+    """
+    Create and save a mel spectrogram visualization to file.
+    
+    Args:
+        mel_spec: The mel spectrogram data
+        file_save_path: Full path where to save the image file
+        hparams: Optional hyperparameters to include in filename
+        keys: Optional list of hyperparameter keys to include
+        sr: Sample rate
+        hop_length: Hop length for the spectrogram
+    """
+    if isinstance(mel_spec, torch.Tensor):
+        mel_spec = mel_spec.squeeze().numpy()  # Remove extra dimensions and convert to NumPy
+
+    plt.figure(figsize=(10, 4))
+    librosa.display.specshow(mel_spec, sr=sr, hop_length=hop_length, x_axis='time', y_axis='mel', cmap='inferno', fmax=sr//2)
+    plt.colorbar(format='%+2.0f dB')
+    plt.title('Mel Spectrogram')
+    plt.xlabel('Time (s)')
+    plt.ylabel('Frequency (Hz)')
+    plt.tight_layout()
+    
+    # Extract directory and make sure it exists
+    save_dir = os.path.dirname(file_save_path)
+    if save_dir != '':
+        os.makedirs(save_dir, exist_ok=True)
+    
+    # Add hyperparameter tag to filename if provided
+    if hparams:
+        base_path = os.path.splitext(file_save_path)[0]
+        ext = os.path.splitext(file_save_path)[1]
+        tag = hparams_to_str(hparams, keys=keys, alias_map=HPARAM_ALIASES)
+        final_path = f"{base_path}_{tag}{ext}"
+    else:
+        final_path = file_save_path
+        
+    plt.savefig(final_path, bbox_inches="tight")
+    plt.close()  # Close the figure to free memory
