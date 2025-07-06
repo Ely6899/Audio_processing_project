@@ -1,31 +1,31 @@
 # --------------------------------------------------------------
 # 0.  Imports – add only TWO lines
 # --------------------------------------------------------------
+import csv
+import os.path
+import re
+from pathlib import Path, PureWindowsPath, PurePosixPath
 from typing import Tuple
 
 import librosa
-from pytorch_grad_cam import GradCAM
-from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
-from pytorch_grad_cam.utils.image import show_cam_on_image
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import torch
+from pytorch_grad_cam import GradCAM
+from pytorch_grad_cam.utils.image import show_cam_on_image
+from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 
 from Models.SentimentAnalysis.ConstPaths import RavdessPaths
-from Visualizations import plot_mel_spectrogram, save_mel_spectrogram
-from models import SentimentModelHandler, ResNetWithAttention
-import torch
-from pathlib import Path
-from audio_dataset import RavdessRawData, EmotionSpecDataset
-from Preprocess import audio_to_mel_spectrogram, standardization
-from PreprocessParams import HOP_LENGTH, MAX_SPECTOGRAM_DURATION_IN_SECONDS, SAMPLE_RATE
-from imageio import imwrite
-import numpy as np
-import re
+from Preprocess import audio_to_mel_spectrogram
+from PreprocessParams import MAX_SPECTOGRAM_DURATION_IN_SECONDS, SAMPLE_RATE
+from audio_dataset import EmotionSpecDataset
 
 EMOTIONS_TO_INCLUDE = ['01', '02', '03', '04', '05', '06', '07', '08']
-ACTORS_TO_INCLUDE = ['01', '02', '03', '04']
-STATEMENTS_TO_INCLUDE = ['01']
+ACTORS_TO_INCLUDE = ['15', '10', '23', '02']
+STATEMENTS_TO_INCLUDE = ['02']
 INTENSITY_TO_INCLUDE = ['01']
-REPETITION_TO_INCLUDE = ['01']
+REPETITION_TO_INCLUDE = ['02']
 
 def wav_indexer(file_name: Path) -> Tuple[str, str]:
     """
@@ -48,9 +48,9 @@ def wav_indexer(file_name: Path) -> Tuple[str, str]:
     }
 
     emotion_index = numbers[2]
-    actor_index = numbers[-1]
+    actor_number = numbers[-1]
     emotion = index_emotion_mapping[emotion_index]
-    return emotion, actor_index
+    return emotion, actor_number
 
 def is_valid_ravdess_file(path: Path) -> bool:
     if "_" in path.stem:
@@ -73,10 +73,40 @@ def is_valid_ravdess_file(path: Path) -> bool:
 # Left for hand_picking only!
 RECORDINGS_TO_PROCESS_HANDPICKED = []
 
-RECORDINGS_TO_PROCESS = sorted([
-    wav for wav in RavdessPaths.AUDIO_ORIGINAL_DATA.rglob("*.wav")
-    if is_valid_ravdess_file(wav)
-])
+# For automated picking!
+RECORDINGS_TO_PROCESS = []
+
+
+# Set to None if handpicked. Set to False if you want without a csv reference.
+# NOTE: It is still required to filter options in the macros above.
+PANDAS_FLAG: bool | None = True
+
+if PANDAS_FLAG is True:
+    df = pd.read_csv(filepath_or_buffer=Path(os.path.join("attributes", "99_attributes.csv")),
+                     usecols=['path'],
+                     quoting=csv.QUOTE_NONE,
+                     encoding='utf-8',
+                     engine='python',
+                     dtype=str)
+
+    path_list = df['path']
+
+    for wav in path_list:
+        wav =  Path(Path(wav.replace("\\", "/").strip()))
+
+        if is_valid_ravdess_file(wav):
+            RECORDINGS_TO_PROCESS.append(wav)
+
+    #RECORDINGS_TO_PROCESS = sorted([Path(wav) for wav in path_list if is_valid_ravdess_file(Path(wav))])
+
+elif PANDAS_FLAG is None: # Use case if we want to use hand-picked paths!
+    RECORDINGS_TO_PROCESS = RECORDINGS_TO_PROCESS_HANDPICKED
+
+else:
+    RECORDINGS_TO_PROCESS = sorted([
+        wav for wav in RavdessPaths.AUDIO_ORIGINAL_DATA.rglob("*.wav")
+        if is_valid_ravdess_file(wav)
+    ])
 
 # --------------------------------------------------------------
 # 1.  Load model exactly as you do now
