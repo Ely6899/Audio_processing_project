@@ -4,7 +4,7 @@
 import csv
 import os.path
 import re
-from pathlib import Path, PureWindowsPath, PurePosixPath
+from pathlib import Path
 from typing import Tuple
 
 import librosa
@@ -21,32 +21,29 @@ from Preprocess import audio_to_mel_spectrogram
 from PreprocessParams import MAX_SPECTOGRAM_DURATION_IN_SECONDS, SAMPLE_RATE
 from audio_dataset import EmotionSpecDataset
 
+# Audio params
+FREQUENCY_BIN_COUNT = 64
+SAMPLE_RATE = 16000
+N_FFT = 512
+WINDOW_LENGTH = N_FFT
+HOP_LENGTH = N_FFT // 2
+MAX_SAMPLES = int(MAX_SPECTOGRAM_DURATION_IN_SECONDS * SAMPLE_RATE)
+TARGET_FRAMES = (MAX_SAMPLES - WINDOW_LENGTH) // HOP_LENGTH + 1
+
+# Filter options
 EMOTIONS_TO_INCLUDE = ['01', '02', '03', '04', '05', '06', '07', '08']
-ACTORS_TO_INCLUDE = ['15', '10', '23', '02']
+ACTORS_TO_INCLUDE = ['09', '06', '03', '18']
 STATEMENTS_TO_INCLUDE = ['02']
 INTENSITY_TO_INCLUDE = ['01']
 REPETITION_TO_INCLUDE = ['02']
 
-def wav_indexer(file_name: Path) -> Tuple[str, str]:
-    """
-    For RAVDESS, label is indicated in the third number in the name. This function handles mapping it to a
-    readable label.
-    :param file_name: File path from RAVDESS dataset.
-    :return: Label of the file according to the index.
-    """
-    numbers = re.findall(r'\d+', file_name.name.__str__())
-
-    index_emotion_mapping = {
-        '01': 'neutral',
-        '02': 'calm',
-        '03': 'happy',
-        '04': 'sad',
-        '05': 'angry',
-        '06': 'fearful',
-        '07': 'disgust',
-        '08': 'surprised'
+index_emotion_mapping = {
+        '01': 'neutral', '02': 'calm', '03': 'happy', '04': 'sad',
+        '05': 'angry', '06': 'fearful', '07': 'disgust', '08': 'surprised'
     }
 
+def wav_indexer(file_name: Path) -> Tuple[str, str]:
+    numbers = re.findall(r'\d+', file_name.name.__str__())
     emotion_index = numbers[2]
     actor_number = numbers[-1]
     emotion = index_emotion_mapping[emotion_index]
@@ -97,9 +94,7 @@ if PANDAS_FLAG is True:
         if is_valid_ravdess_file(wav):
             RECORDINGS_TO_PROCESS.append(wav)
 
-    #RECORDINGS_TO_PROCESS = sorted([Path(wav) for wav in path_list if is_valid_ravdess_file(Path(wav))])
-
-elif PANDAS_FLAG is None: # Use case if we want to use hand-picked paths!
+elif PANDAS_FLAG is None:
     RECORDINGS_TO_PROCESS = RECORDINGS_TO_PROCESS_HANDPICKED
 
 else:
@@ -118,92 +113,91 @@ model = torch.load(Path("ResNetWithAttention.pt"),
 model.eval()
 
 # --------------------------------------------------------------
-# 2.  Prepare a single-spectrogram batch [1, 1, F, T]
+# 2.  Loop through each file
 # --------------------------------------------------------------
 for wav_path in RECORDINGS_TO_PROCESS:
     print(f"Running GradCam, spectrogram and waveform on {wav_path.stem}")
-
     wav_emotion, actor_index = wav_indexer(wav_path)
 
-    spec_tensor, _ = EmotionSpecDataset({(wav_path, wav_emotion)})[0]    # shape (1, freq_bins, time_frames)
-    input_tensor = spec_tensor.unsqueeze(0).to(device)               # shape (1, 1, freq_bins, time_frames)
+    spec_tensor, _ = EmotionSpecDataset({(wav_path, wav_emotion)})[0]  # shape (1, freq_bins, time_frames)
+    input_tensor = spec_tensor.unsqueeze(0).to(device)  # shape (1, 1, F, T)
 
     # --------------------------------------------------------------
-    # 3.  Pick the layer you want to “look” at
-    #     • last conv in module3 ≈ highest-level features
-    #     • you can swap to module2 / module1 for lower-level detail
+    # GradCAM setup
     # --------------------------------------------------------------
     target_layers = [model.module3.blocks[-1].conv2]
-
-    # --------------------------------------------------------------
-    # 4.  Build + run Grad-CAM
-    # --------------------------------------------------------------
-    print("Running GradCam")
     cam = GradCAM(model=model, target_layers=target_layers)
 
-    pred_idx = model(input_tensor).argmax(dim=1).item()              # predicted class id
-    target_label = [ClassifierOutputTarget(pred_idx)]                     # focus heat-map on that class
+    pred_idx = model(input_tensor).argmax(dim=1).item()
+    target_label = [ClassifierOutputTarget(pred_idx)]
 
     cam_mask = cam(input_tensor=input_tensor,
-                        targets=target_label,
-                        aug_smooth=True,
-                        eigen_smooth=True)[0]        # (F, T)   values 0-1
-
-    print("Finished GradCam\n")
+                   targets=target_label,
+                   aug_smooth=True,
+                   eigen_smooth=True)[0]
 
     # --------------------------------------------------------------
-    # 5.  Get *raw* dB mel spectrogram (for prettier colours)
-    #     – request **no normalisation** so we can min-max for display only
+    # Prepare raw mel spectrogram
     # --------------------------------------------------------------
-
-    print("Plotting Spectrogram")
-
     raw_spec = audio_to_mel_spectrogram(
         file_path=wav_path,
         max_length_in_seconds=MAX_SPECTOGRAM_DURATION_IN_SECONDS,
-        normalization_fn=lambda x: x               # keep real dB
-    ).astype("float32")                             # (F, T)
+        normalization_fn=lambda x: x  # keep real dB
+    ).astype("float32")
 
-    raw_norm = (raw_spec - raw_spec.min()) / (raw_spec.ptp() + 1e-6) # 0-1
-    rgb_base  = np.stack([raw_norm]*3, axis=-1).astype(np.float32)   # (F, T, 3)
+    raw_norm = (raw_spec - raw_spec.min()) / (raw_spec.ptp() + 1e-6)
+    rgb_base = np.stack([raw_norm] * 3, axis=-1).astype(np.float32)
 
-    overlay = show_cam_on_image(rgb_base,
-                                cam_mask,
-                                use_rgb=True,
-                                image_weight=0)   # 0→only heat-map, 1→only spec
+    overlay = show_cam_on_image(rgb_base, cam_mask, use_rgb=True, image_weight=0)
 
-    print("Finished spectrogram\n")
-
-    # Step 4: Plot all components
+    # --------------------------------------------------------------
+    # Plot
+    # --------------------------------------------------------------
     fig, axes = plt.subplots(3, 1, figsize=(12, 12))
-
     fig.suptitle(f"Actor {actor_index} - {wav_emotion}", fontsize=16, y=0.95)
 
-    # 1. Waveform
-
-    print("Plotting waveform")
+    # Load waveform
     y, sr = librosa.load(wav_path, sr=SAMPLE_RATE)
-    print("Finished waveform\n")
-
-    axes[0].plot(y)
+    time_waveform = np.linspace(0, len(y) / SAMPLE_RATE, num=len(y))
+    axes[0].plot(time_waveform, y)
     axes[0].set_title("Waveform")
-    axes[0].set_xlabel("Samples")
+    axes[0].set_xlabel("Time (s)")
 
-    # 2. Mel-spectrogram
-    im2 = axes[1].imshow(raw_spec, origin="lower", aspect="auto")
-    axes[1].set_title("Mel Spectrogram (dB)")
+    # Plot mel spectrogram + F0
+    im2 = axes[1].imshow(raw_spec,
+                         origin="lower",
+                         aspect="auto",
+                         extent=[0, raw_spec.shape[1] * HOP_LENGTH / SAMPLE_RATE, 0, SAMPLE_RATE // 2])
+    axes[1].set_title("Mel Spectrogram (dB) + F0 Overlay")
+    axes[1].set_ylabel("Hz")
+    axes[1].set_xlabel("Time")
     fig.colorbar(im2, ax=axes[1])
 
-    # 3. Grad-CAM heatmap
-    axes[2].imshow(overlay, origin="lower")
-    axes[2].set_title(f"Grad-CAM (Predicted: {pred_idx})")
+    # Extract and plot F0
+    f0, voiced_flag, voiced_probs = librosa.pyin(
+        y,
+        fmin=librosa.note_to_hz('C2'),
+        fmax=librosa.note_to_hz('C7'),
+        sr=SAMPLE_RATE,
+        hop_length=HOP_LENGTH
+    )
+    times = librosa.frames_to_time(np.arange(len(f0)), sr=SAMPLE_RATE, hop_length=HOP_LENGTH)
+    valid_idx = ~np.isnan(f0)
+    axes[1].plot(times[valid_idx], f0[valid_idx], color='orange', linewidth=2, label="F0 (Hz)")
+    axes[1].legend(loc='upper right')
 
-    # Save the figure
-    # Create subfolder per actor
+    # GradCAM heatmap
+    axes[2].imshow(overlay,
+                   origin="lower",
+                   aspect="auto",
+                   extent=[0, raw_spec.shape[1] * HOP_LENGTH / SAMPLE_RATE, 0, SAMPLE_RATE // 2])
+
+    #emotion_classified = index_emotion_mapping[f'0{pred_idx + 1}']
+    #axes[2].set_title(f"Grad-CAM (Predicted: {emotion_classified})")
+
+    # Save figure
     save_folder = Path("Benchmark_Results") / f"Actor_{actor_index}"
     save_folder.mkdir(parents=True, exist_ok=True)
-
-    # Save the figure inside that subfolder
     save_name = wav_path.stem + "_subplot.png"
     save_path = save_folder / save_name
 
@@ -211,5 +205,3 @@ for wav_path in RECORDINGS_TO_PROCESS:
     plt.savefig(save_path)
     plt.close(fig)
     print(f"Saved: {save_name}")
-
-    #save_mel_spectrogram(overlay, file_save_path=Path("heatmap_only_heatmap"), sr=SAMPLE_RATE, hop_length=HOP_LENGTH)
