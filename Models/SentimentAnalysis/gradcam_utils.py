@@ -39,8 +39,25 @@ REPETITION_TO_INCLUDE = ['02']
 
 index_emotion_mapping = {
         '01': 'neutral', '02': 'calm', '03': 'happy', '04': 'sad',
-        '05': 'angry', '06': 'fearful', '07': 'disgust', '08': 'surprised'
+        '05': 'angry', '06': 'fearful', '07': 'disgust', '08': 'surprised',
     }
+
+label_emotion_mapping = {
+    0: 'angry',
+    1: 'calm',
+    2: 'disgust',
+    3: 'fearful',
+    4: 'happy',
+    5: 'neutral',
+    6: 'sad',
+    7: 'surprised',
+}
+
+# truth file index -> prediction index(Lexi) -> list placement -> emotion
+# 01(Neutral) -> 5 -> 6 -> fearful
+# 02(Calm) ->
+# 04(Sad) -> 6 -> 7 -> disgust
+
 
 def wav_indexer(file_name: Path) -> Tuple[str, str]:
     numbers = re.findall(r'\d+', file_name.name.__str__())
@@ -192,8 +209,8 @@ for wav_path in RECORDINGS_TO_PROCESS:
                    aspect="auto",
                    extent=[0, raw_spec.shape[1] * HOP_LENGTH / SAMPLE_RATE, 0, SAMPLE_RATE // 2])
 
-    #emotion_classified = index_emotion_mapping[f'0{pred_idx + 1}']
-    #axes[2].set_title(f"Grad-CAM (Predicted: {emotion_classified})")
+    emotion_classified = label_emotion_mapping[pred_idx]
+    axes[2].set_title(f"Grad-CAM (Predicted: {emotion_classified})")
 
     # Save figure
     save_folder = Path("Benchmark_Results") / f"Actor_{actor_index}"
