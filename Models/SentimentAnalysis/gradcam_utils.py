@@ -20,7 +20,7 @@ from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 from Models.SentimentAnalysis.ConstPaths import RavdessPaths
 from Models.SentimentAnalysis.Visualizations import plot_mel_spectrogram
 from Preprocess import audio_to_mel_spectrogram
-from PreprocessParams import MAX_SPECTOGRAM_DURATION_IN_SECONDS, SAMPLE_RATE
+from PreprocessParams import MAX_SPECTOGRAM_DURATION_IN_SECONDS
 from audio_dataset import EmotionSpecDataset
 
 # Audio params
@@ -34,7 +34,7 @@ TARGET_FRAMES = (MAX_SAMPLES - WINDOW_LENGTH) // HOP_LENGTH + 1
 
 # Filter options
 EMOTIONS_TO_INCLUDE = ['01', '02', '03', '04', '05', '06', '07', '08']
-ACTORS_TO_INCLUDE = ['09', '06', '03', '18']
+ACTORS_TO_INCLUDE = [f"{i:02d}" for i in range(1, 25)]
 STATEMENTS_TO_INCLUDE = ['01', '02']
 REPETITION_TO_INCLUDE = ['01', '02']
 INTENSITY_TO_INCLUDE = ['02']
@@ -158,7 +158,7 @@ for emotion, actor_dict in emotion_to_actor_sentence_repetition.items():
 
     for actor, combo_dict in actor_dict.items():
         print(f"  Actor {actor}")
-        fig, axes = plt.subplots(3, 4, figsize=(20, 12), sharex=True)
+        fig, axes = plt.subplots(2, 4, figsize=(20, 16), sharex=True)
         fig.suptitle(f"{emotion.capitalize()} – Actor {actor}", fontsize=18, y=0.98)
 
         sorted_keys = sorted(combo_dict.keys(), key=lambda x: (x[0], x[1]))  # (statement, repetition)
@@ -177,17 +177,21 @@ for emotion, actor_dict in emotion_to_actor_sentence_repetition.items():
                            aug_smooth=True,
                            eigen_smooth=True)[0]
 
-            high_activation_regions = extract_important_time_regions(
-                cam_mask, sample_rate=SAMPLE_RATE, hop_length=HOP_LENGTH, threshold_quantile=0.85)
+            # high_activation_regions = extract_important_time_regions(
+            #     cam_mask, sample_rate=SAMPLE_RATE, hop_length=HOP_LENGTH, threshold_quantile=0.75)
 
-            y, sr = librosa.load(wav_path, sr=SAMPLE_RATE)
-            rms = librosa.feature.rms(y=y, frame_length=WINDOW_LENGTH, hop_length=HOP_LENGTH)[0]
-            rms_times = librosa.frames_to_time(np.arange(len(rms)), sr=sr, hop_length=HOP_LENGTH)
-
-            f0, _, _ = librosa.pyin(
-                y, fmin=librosa.note_to_hz('C2'), fmax=librosa.note_to_hz('C7'),
-                sr=SAMPLE_RATE, hop_length=HOP_LENGTH)
-            f0_times = librosa.frames_to_time(np.arange(len(f0)), sr=sr, hop_length=HOP_LENGTH)
+            # y, sr = librosa.load(wav_path, mono=True, sr=SAMPLE_RATE)
+            # if len(y) < MAX_SAMPLES:
+            #     y = np.pad(y, (0, MAX_SAMPLES - len(y)))
+            # else:
+            #     y = y[:MAX_SAMPLES]
+            # rms = librosa.feature.rms(y=y, frame_length=WINDOW_LENGTH, hop_length=HOP_LENGTH)[0]
+            # rms_times = librosa.frames_to_time(np.arange(len(rms)), sr=sr, hop_length=HOP_LENGTH)
+            #
+            # f0, _, _ = librosa.pyin(
+            #     y, fmin=librosa.note_to_hz('C2'), fmax=librosa.note_to_hz('C7'),
+            #     sr=SAMPLE_RATE, hop_length=HOP_LENGTH)
+            # f0_times = librosa.frames_to_time(np.arange(len(f0)), sr=sr, hop_length=HOP_LENGTH)
 
             raw_spec = audio_to_mel_spectrogram(
                 file_path=wav_path, max_length_in_seconds=MAX_SPECTOGRAM_DURATION_IN_SECONDS,
@@ -196,28 +200,52 @@ for emotion, actor_dict in emotion_to_actor_sentence_repetition.items():
             rgb_base = np.stack([raw_norm] * 3, axis=-1).astype(np.float32)
             overlay = show_cam_on_image(rgb_base, cam_mask, use_rgb=True, image_weight=0)
 
-            axes[0][col_idx].set_title(f"Stmt {statement} Rep {repetition}")
-            plot_segmented_line(axes[0][col_idx], rms_times, rms, high_activation_regions,
-                                base_color='lightgray', highlight_color='crimson', linewidth=2)
-            axes[0][col_idx].set_ylabel("Volume")
-            axes[0][col_idx].set_ylim(0, 0.5)
-            axes[0][col_idx].grid(True)
+            # axes[0][col_idx].set_title(f"Stmt {statement} Rep {repetition}")
+            # plot_segmented_line(axes[0][col_idx], rms_times, rms, high_activation_regions,
+            #                     base_color='lightgray', highlight_color='crimson', linewidth=2)
+            # axes[0][col_idx].set_ylabel("Volume")
+            # axes[0][col_idx].set_ylim(0, 0.5)
+            # axes[0][col_idx].grid(True)
+            #
+            # plot_segmented_line(axes[1][col_idx], f0_times, f0, high_activation_regions,
+            #                     base_color='lightgray', highlight_color='black', linewidth=2)
+            # axes[1][col_idx].set_ylabel("F0 (Hz)")
+            # axes[1][col_idx].set_ylim(0, 500)
+            # axes[1][col_idx].grid(True)
 
-            plot_segmented_line(axes[1][col_idx], f0_times, f0, high_activation_regions,
-                                base_color='lightgray', highlight_color='black', linewidth=2)
-            axes[1][col_idx].set_ylabel("F0 (Hz)")
-            axes[1][col_idx].set_ylim(0, 400)
-            axes[1][col_idx].grid(True)
-
-            axes[2][col_idx].imshow(
+            axes[0][col_idx].imshow(
                 overlay, origin="lower", aspect="auto",
                 extent=[0, raw_spec.shape[1] * HOP_LENGTH / SAMPLE_RATE, 0, SAMPLE_RATE // 2])
             emotion_classified = label_emotion_mapping[pred_idx]
-            axes[2][col_idx].set_title(f"Predicted: {emotion_classified}")
-            axes[2][col_idx].set_xlabel("Time (s)")
-            axes[2][col_idx].set_ylabel("Freq (Hz)")
+            axes[0][col_idx].set_title(f"Predicted: {emotion_classified}")
+            axes[0][col_idx].set_xlabel("Time (s)")
+            axes[0][col_idx].set_ylabel("Freq (Hz)")
 
-        # Save per-actor plot
+            # NEW: Plot CAM-filtered spectrogram
+            alpha_mask = np.clip(cam_mask, 0, 1)
+
+            # Keep only yellow-red regions (~ top 30% of activation)
+            threshold = np.quantile(alpha_mask, 0.88) #84%, 86%, 88%, 90%(?),
+            strong_activation_mask = (alpha_mask >= threshold).astype(np.float32)
+
+            # Apply the mask to the original spectrogram (not RGB)
+            masked_spec = raw_spec * strong_activation_mask
+
+            # Plot using librosa with a colormap (e.g., magma, viridis)
+            img = librosa.display.specshow(
+                masked_spec,
+                sr=SAMPLE_RATE,
+                hop_length=HOP_LENGTH,
+                x_axis='time',
+                y_axis='linear',
+                ax=axes[1][col_idx],
+                cmap='magma'  # or 'viridis', 'inferno', etc.
+            )
+
+            axes[1][col_idx].set_title("Filtered by Attention (Top 30%)")
+            axes[1][col_idx].set_xlabel("Time (s)")
+            axes[1][col_idx].set_ylabel("Freq (Hz)")
+
         save_folder = Path("Benchmark_Results") / "Summary_By_Actor" / actor
         save_folder.mkdir(parents=True, exist_ok=True)
         save_path = save_folder / f"Emotion_{emotion}_overview.png"
@@ -231,79 +259,79 @@ for emotion, actor_dict in emotion_to_actor_sentence_repetition.items():
 # --------------------------------------------------------------
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
-from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 unused but required for 3D plot
+# from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 unused but required for 3D plot
+#
+# rms_vectors = []
+# f0_vectors = []
+# emotion_labels = []
 
-rms_vectors = []
-f0_vectors = []
-emotion_labels = []
-
-print("\n===> Gathering data for PCA summary...")
-
-for emotion, actor_dict in emotion_to_actor_sentence_repetition.items():
-    for actor, combo_dict in actor_dict.items():
-        for (statement, repetition), wav_path in combo_dict.items():
-            y, sr = librosa.load(wav_path, sr=SAMPLE_RATE)
-
-            # RMS feature
-            rms = librosa.feature.rms(y=y, frame_length=WINDOW_LENGTH, hop_length=HOP_LENGTH)[0]
-            rms = np.interp(np.linspace(0, len(rms) - 1, 100), np.arange(len(rms)), rms)
-            rms_vectors.append(rms)
-
-            # F0 feature (handle NaNs)
-            f0, _, _ = librosa.pyin(
-                y, fmin=librosa.note_to_hz('C2'), fmax=librosa.note_to_hz('C7'),
-                sr=sr, hop_length=HOP_LENGTH)
-            f0 = pd.Series(f0).interpolate(limit_direction="both").bfill().ffill().to_numpy()
-            f0 = np.interp(np.linspace(0, len(f0) - 1, 100), np.arange(len(f0)), f0)
-            f0_vectors.append(f0)
-
-            emotion_labels.append(emotion)
-
-rms_matrix = np.vstack(rms_vectors)
-f0_matrix = np.vstack(f0_vectors)
-
-def pca_and_plot(data_matrix, labels, feature_name, axes_2d, axes_3d):
-    scaler = StandardScaler()
-    data_scaled = scaler.fit_transform(data_matrix)
-
-    pca = PCA(n_components=3)
-    data_pca = pca.fit_transform(data_scaled)
-
-    unique_labels = sorted(set(labels))
-    colors = plt.cm.tab10.colors
-    label_to_color = {label: colors[i % len(colors)] for i, label in enumerate(unique_labels)}
-
-    for label in unique_labels:
-        mask = np.array(labels) == label
-        axes_2d.scatter(data_pca[mask, 0], data_pca[mask, 1],
-                        label=label, color=label_to_color[label], alpha=0.7)
-    axes_2d.set_title(f"{feature_name} – PCA 2D")
-    axes_2d.set_xlabel("PC1")
-    axes_2d.set_ylabel("PC2")
-    axes_2d.legend()
-
-    for label in unique_labels:
-        mask = np.array(labels) == label
-        axes_3d.scatter(data_pca[mask, 0], data_pca[mask, 1], data_pca[mask, 2],
-                        label=label, color=label_to_color[label], alpha=0.7)
-    axes_3d.set_title(f"{feature_name} – PCA 3D")
-    axes_3d.set_xlabel("PC1")
-    axes_3d.set_ylabel("PC2")
-    axes_3d.set_zlabel("PC3")
-
-fig = plt.figure(figsize=(16, 10))
-ax_rms_2d = fig.add_subplot(2, 2, 1)
-ax_f0_2d = fig.add_subplot(2, 2, 2)
-ax_rms_3d = fig.add_subplot(2, 2, 3, projection='3d')
-ax_f0_3d = fig.add_subplot(2, 2, 4, projection='3d')
-
-pca_and_plot(rms_matrix, emotion_labels, "RMS", ax_rms_2d, ax_rms_3d)
-pca_and_plot(f0_matrix, emotion_labels, "F0", ax_f0_2d, ax_f0_3d)
-
-plt.tight_layout()
-summary_dir = Path("Benchmark_Results") / "Summary_By_Actor"
-summary_dir.mkdir(parents=True, exist_ok=True)
-save_pca_path = summary_dir / "PCA_Overview.png"
-plt.savefig(save_pca_path)
-#plt.show()
-print(f"Saved PCA plot: {save_pca_path}")
+# print("\n===> Gathering data for PCA summary...")
+#
+# for emotion, actor_dict in emotion_to_actor_sentence_repetition.items():
+#     for actor, combo_dict in actor_dict.items():
+#         for (statement, repetition), wav_path in combo_dict.items():
+#             y, sr = librosa.load(wav_path, mono = True, sr=SAMPLE_RATE)
+#
+#             # RMS feature
+#             rms = librosa.feature.rms(y=y, frame_length=WINDOW_LENGTH, hop_length=HOP_LENGTH)[0]
+#             rms = np.interp(np.linspace(0, len(rms) - 1, 100), np.arange(len(rms)), rms)
+#             rms_vectors.append(rms)
+#
+#             # F0 feature (handle NaNs)
+#             f0, _, _ = librosa.pyin(
+#                 y, fmin=librosa.note_to_hz('C2'), fmax=librosa.note_to_hz('C7'),
+#                 sr=sr, hop_length=HOP_LENGTH)
+#             f0 = pd.Series(f0).interpolate(limit_direction="both").bfill().ffill().to_numpy()
+#             f0 = np.interp(np.linspace(0, len(f0) - 1, 100), np.arange(len(f0)), f0)
+#             f0_vectors.append(f0)
+#
+#             emotion_labels.append(emotion)
+#
+# rms_matrix = np.vstack(rms_vectors)
+# f0_matrix = np.vstack(f0_vectors)
+#
+# def pca_and_plot(data_matrix, labels, feature_name, axes_2d, axes_3d):
+#     scaler = StandardScaler()
+#     data_scaled = scaler.fit_transform(data_matrix)
+#
+#     pca = PCA(n_components=3)
+#     data_pca = pca.fit_transform(data_scaled)
+#
+#     unique_labels = sorted(set(labels))
+#     colors = plt.cm.tab10.colors
+#     label_to_color = {label: colors[i % len(colors)] for i, label in enumerate(unique_labels)}
+#
+#     for label in unique_labels:
+#         mask = np.array(labels) == label
+#         axes_2d.scatter(data_pca[mask, 0], data_pca[mask, 1],
+#                         label=label, color=label_to_color[label], alpha=0.7)
+#     axes_2d.set_title(f"{feature_name} – PCA 2D")
+#     axes_2d.set_xlabel("PC1")
+#     axes_2d.set_ylabel("PC2")
+#     axes_2d.legend()
+#
+#     for label in unique_labels:
+#         mask = np.array(labels) == label
+#         axes_3d.scatter(data_pca[mask, 0], data_pca[mask, 1], data_pca[mask, 2],
+#                         label=label, color=label_to_color[label], alpha=0.7)
+#     axes_3d.set_title(f"{feature_name} – PCA 3D")
+#     axes_3d.set_xlabel("PC1")
+#     axes_3d.set_ylabel("PC2")
+#     axes_3d.set_zlabel("PC3")
+#
+# fig = plt.figure(figsize=(16, 10))
+# ax_rms_2d = fig.add_subplot(2, 2, 1)
+# ax_f0_2d = fig.add_subplot(2, 2, 2)
+# ax_rms_3d = fig.add_subplot(2, 2, 3, projection='3d')
+# ax_f0_3d = fig.add_subplot(2, 2, 4, projection='3d')
+#
+# pca_and_plot(rms_matrix, emotion_labels, "RMS", ax_rms_2d, ax_rms_3d)
+# pca_and_plot(f0_matrix, emotion_labels, "F0", ax_f0_2d, ax_f0_3d)
+#
+# plt.tight_layout()
+# summary_dir = Path("Benchmark_Results") / "Summary_By_Actor"
+# summary_dir.mkdir(parents=True, exist_ok=True)
+# save_pca_path = summary_dir / "PCA_Overview.png"
+# plt.savefig(save_pca_path)
+# #plt.show()
+# print(f"Saved PCA plot: {save_pca_path}")
