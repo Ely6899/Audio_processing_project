@@ -2,7 +2,6 @@
 # 0.  Imports – add only TWO lines
 # --------------------------------------------------------------
 import csv
-import os.path
 import re
 from collections import defaultdict
 from pathlib import Path
@@ -158,7 +157,7 @@ for emotion, actor_dict in emotion_to_actor_sentence_repetition.items():
 
     for actor, combo_dict in actor_dict.items():
         print(f"  Actor {actor}")
-        fig, axes = plt.subplots(2, 4, figsize=(20, 16), sharex=True)
+        fig, axes = plt.subplots(2, 4, figsize=(30, 12), sharex=True)
         fig.suptitle(f"{emotion.capitalize()} – Actor {actor}", fontsize=18, y=0.98)
 
         sorted_keys = sorted(combo_dict.keys(), key=lambda x: (x[0], x[1]))  # (statement, repetition)
@@ -217,7 +216,7 @@ for emotion, actor_dict in emotion_to_actor_sentence_repetition.items():
                 overlay, origin="lower", aspect="auto",
                 extent=[0, raw_spec.shape[1] * HOP_LENGTH / SAMPLE_RATE, 0, SAMPLE_RATE // 2])
             emotion_classified = label_emotion_mapping[pred_idx]
-            axes[0][col_idx].set_title(f"Predicted: {emotion_classified}")
+            axes[0][col_idx].set_title(f"Statement: {statement} Repetition: {repetition}")
             axes[0][col_idx].set_xlabel("Time (s)")
             axes[0][col_idx].set_ylabel("Freq (Hz)")
 
