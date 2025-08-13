@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import torch
+from scipy.signal import correlate2d
 from pytorch_grad_cam import GradCAM
 from pytorch_grad_cam.utils.image import show_cam_on_image
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
@@ -72,43 +73,61 @@ def is_valid_ravdess_file(path: Path) -> bool:
         actor in ACTORS_TO_INCLUDE
     )
 
-def extract_important_time_regions(cam_mask: np.ndarray,
-                                   sample_rate: int,
-                                   hop_length: int,
-                                   threshold_quantile: float = 0.9) -> List[Tuple[float, float]]:
-    time_importance = cam_mask.mean(axis=0)
-    threshold = np.quantile(time_importance, threshold_quantile)
-    high_activation = time_importance >= threshold
+def build_correlation_kernel(freq_bins = 40, time_bins = 20) -> np.ndarray:
+    # Create smooth frequency profile: almost flat, small gentle slope
+    freq_profile = np.linspace(1, 0.9, freq_bins)[:, np.newaxis]  # very gentle high→low
 
-    regions = []
-    start_idx = None
-    for idx, is_high in enumerate(high_activation):
-        if is_high and start_idx is None:
-            start_idx = idx
-        elif not is_high and start_idx is not None:
-            end_idx = idx
-            start_time = start_idx * hop_length / sample_rate
-            end_time = end_idx * hop_length / sample_rate
-            regions.append((start_time, end_time))
-            start_idx = None
-    if start_idx is not None:
-        end_idx = len(high_activation)
-        start_time = start_idx * hop_length / sample_rate
-        end_time = end_idx * hop_length / sample_rate
-        regions.append((start_time, end_time))
-    return regions
+    # Smooth time modulation: soft sine wave
+    time_profile = np.sin(np.linspace(0, np.pi, time_bins))[np.newaxis, :]
 
-def plot_segmented_line(ax, times: np.ndarray, values: np.ndarray,
-                        highlight_regions: List[Tuple[float, float]],
-                        base_color='gray', highlight_color='crimson', linewidth=2):
-    for i in range(len(times)-1):
-        t0, t1 = times[i], times[i+1]
-        v0, v1 = values[i], values[i+1]
-        mid = 0.5*(t0+t1)
-        color = highlight_color if any(start <= mid <= end for start, end in highlight_regions) else base_color
-        ax.plot([t0, t1], [v0, v1], color=color, linewidth=linewidth)
+    # Combine profiles to get 2D kernel
+    kernel = freq_profile * time_profile  # element-wise multiplication
+
+    # Normalize: zero-mean and unit-norm
+    kernel -= kernel.mean()
+    kernel /= np.linalg.norm(kernel) + 1e-12
+
+    return kernel
+
+# def extract_important_time_regions(cam_mask: np.ndarray,
+#                                    sample_rate: int,
+#                                    hop_length: int,
+#                                    threshold_quantile: float = 0.9) -> List[Tuple[float, float]]:
+#     time_importance = cam_mask.mean(axis=0)
+#     threshold = np.quantile(time_importance, threshold_quantile)
+#     high_activation = time_importance >= threshold
+#
+#     regions = []
+#     start_idx = None
+#     for idx, is_high in enumerate(high_activation):
+#         if is_high and start_idx is None:
+#             start_idx = idx
+#         elif not is_high and start_idx is not None:
+#             end_idx = idx
+#             start_time = start_idx * hop_length / sample_rate
+#             end_time = end_idx * hop_length / sample_rate
+#             regions.append((start_time, end_time))
+#             start_idx = None
+#     if start_idx is not None:
+#         end_idx = len(high_activation)
+#         start_time = start_idx * hop_length / sample_rate
+#         end_time = end_idx * hop_length / sample_rate
+#         regions.append((start_time, end_time))
+#     return regions
+#
+# def plot_segmented_line(ax, times: np.ndarray, values: np.ndarray,
+#                         highlight_regions: List[Tuple[float, float]],
+#                         base_color='gray', highlight_color='crimson', linewidth=2):
+#     for i in range(len(times)-1):
+#         t0, t1 = times[i], times[i+1]
+#         v0, v1 = values[i], values[i+1]
+#         mid = 0.5*(t0+t1)
+#         color = highlight_color if any(start <= mid <= end for start, end in highlight_regions) else base_color
+#         ax.plot([t0, t1], [v0, v1], color=color, linewidth=linewidth)
 
 # Left for hand_picking only!
+correlation_kernel = build_correlation_kernel()
+
 RECORDINGS_TO_PROCESS_HANDPICKED = []
 
 # For automated picking!
@@ -157,7 +176,7 @@ for emotion, actor_dict in emotion_to_actor_sentence_repetition.items():
 
     for actor, combo_dict in actor_dict.items():
         print(f"  Actor {actor}")
-        fig, axes = plt.subplots(2, 4, figsize=(30, 12), sharex=True)
+        fig, axes = plt.subplots(3, 4, figsize=(30, 12), sharex=True)
         fig.suptitle(f"{emotion.capitalize()} – Actor {actor}", fontsize=18, y=0.98)
 
         sorted_keys = sorted(combo_dict.keys(), key=lambda x: (x[0], x[1]))  # (statement, repetition)
@@ -212,9 +231,10 @@ for emotion, actor_dict in emotion_to_actor_sentence_repetition.items():
             # axes[1][col_idx].set_ylim(0, 500)
             # axes[1][col_idx].grid(True)
 
-            axes[0][col_idx].imshow(
+            im1 = axes[0][col_idx].imshow(
                 overlay, origin="lower", aspect="auto",
-                extent=[0, raw_spec.shape[1] * HOP_LENGTH / SAMPLE_RATE, 0, SAMPLE_RATE // 2])
+                extent=[0, raw_spec.shape[1] * HOP_LENGTH / SAMPLE_RATE, 0, SAMPLE_RATE // 2],
+            )
             emotion_classified = label_emotion_mapping[pred_idx]
             axes[0][col_idx].set_title(f"Statement: {statement} Repetition: {repetition}")
             axes[0][col_idx].set_xlabel("Time (s)")
@@ -231,19 +251,28 @@ for emotion, actor_dict in emotion_to_actor_sentence_repetition.items():
             masked_spec = raw_spec * strong_activation_mask
 
             # Plot using librosa with a colormap (e.g., magma, viridis)
-            img = librosa.display.specshow(
+            img2 = librosa.display.specshow(
                 masked_spec,
                 sr=SAMPLE_RATE,
                 hop_length=HOP_LENGTH,
                 x_axis='time',
                 y_axis='linear',
                 ax=axes[1][col_idx],
-                cmap='magma'  # or 'viridis', 'inferno', etc.
+                cmap='magma',  # or 'viridis', 'inferno', etc.
             )
 
             axes[1][col_idx].set_title("Filtered by Attention (Top 30%)")
             axes[1][col_idx].set_xlabel("Time (s)")
             axes[1][col_idx].set_ylabel("Freq (Hz)")
+
+            corr = correlate2d(raw_spec, correlation_kernel, mode='same')
+
+            # Normalize correlation to [-1,1] for visualization
+            corr /= np.max(np.abs(corr)) + 1e-12
+
+            # --- 5. Plot cross-correlation map ---
+            img3 = axes[2][col_idx].imshow(corr, aspect='auto', origin='lower', cmap='RdBu_r')
+            axes[2][col_idx].set_title("Cross-Correlation with Smooth Flat Kernel")
 
         save_folder = Path("Benchmark_Results") / "Summary_By_Actor" / actor
         save_folder.mkdir(parents=True, exist_ok=True)
