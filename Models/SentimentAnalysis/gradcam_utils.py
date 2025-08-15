@@ -73,7 +73,7 @@ def is_valid_ravdess_file(path: Path) -> bool:
         actor in ACTORS_TO_INCLUDE
     )
 
-def build_correlation_kernel(freq_bins = 40, time_bins = 20) -> np.ndarray:
+def build_correlation_kernel(freq_bins = 20, time_bins = 40) -> np.ndarray:
     # Create smooth frequency profile: almost flat, small gentle slope
     freq_profile = np.linspace(1, 0.9, freq_bins)[:, np.newaxis]  # very gentle high→low
 
@@ -231,7 +231,7 @@ for emotion, actor_dict in emotion_to_actor_sentence_repetition.items():
             # axes[1][col_idx].set_ylim(0, 500)
             # axes[1][col_idx].grid(True)
 
-            im1 = axes[0][col_idx].imshow(
+            axes[0, col_idx].imshow(
                 overlay, origin="lower", aspect="auto",
                 extent=[0, raw_spec.shape[1] * HOP_LENGTH / SAMPLE_RATE, 0, SAMPLE_RATE // 2],
             )
@@ -251,28 +251,28 @@ for emotion, actor_dict in emotion_to_actor_sentence_repetition.items():
             masked_spec = raw_spec * strong_activation_mask
 
             # Plot using librosa with a colormap (e.g., magma, viridis)
-            img2 = librosa.display.specshow(
+            librosa.display.specshow(
                 masked_spec,
                 sr=SAMPLE_RATE,
                 hop_length=HOP_LENGTH,
                 x_axis='time',
                 y_axis='linear',
-                ax=axes[1][col_idx],
+                ax=axes[1, col_idx],
                 cmap='magma',  # or 'viridis', 'inferno', etc.
             )
 
-            axes[1][col_idx].set_title("Filtered by Attention (Top 30%)")
-            axes[1][col_idx].set_xlabel("Time (s)")
-            axes[1][col_idx].set_ylabel("Freq (Hz)")
+            axes[1, col_idx].set_title("Filtered by Attention (Top 30%)")
+            axes[1, col_idx].set_xlabel("Time (s)")
+            axes[1, col_idx].set_ylabel("Freq (Hz)")
 
-            corr = correlate2d(raw_spec, correlation_kernel, mode='same')
+            corr = correlate2d(masked_spec, correlation_kernel, mode='full', boundary='symm')
 
             # Normalize correlation to [-1,1] for visualization
             corr /= np.max(np.abs(corr)) + 1e-12
 
             # --- 5. Plot cross-correlation map ---
-            img3 = axes[2][col_idx].imshow(corr, aspect='auto', origin='lower', cmap='RdBu_r')
-            axes[2][col_idx].set_title("Cross-Correlation with Smooth Flat Kernel")
+            axes[2, col_idx].imshow(corr, aspect='auto', origin='lower', cmap='RdBu_r', extent=[0, raw_spec.shape[1] * HOP_LENGTH / SAMPLE_RATE, 0, SAMPLE_RATE // 2])
+            axes[2, col_idx].set_title("Cross-Correlation with Smooth Flat Kernel")
 
         save_folder = Path("Benchmark_Results") / "Summary_By_Actor" / actor
         save_folder.mkdir(parents=True, exist_ok=True)
