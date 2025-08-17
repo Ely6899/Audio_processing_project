@@ -1,6 +1,14 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
+K_vert_5x3 = np.array([[-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+ [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+ [ 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+ [ 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4],
+ [ 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+ [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+ [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1]])
+
 # Kernel size
 freq_bins = 40   # vertical axis (frequency)
 time_bins = 20   # horizontal axis (time)
@@ -20,7 +28,7 @@ kernel /= np.linalg.norm(kernel) + 1e-12
 
 # Visualize
 plt.figure(figsize=(6,4))
-plt.imshow(kernel, aspect='auto', origin='lower', cmap='RdBu_r')
+plt.imshow(K_vert_5x3, aspect='auto', origin='lower', cmap='RdBu_r')
 plt.colorbar(label='Amplitude')
 plt.title("Smooth Flat-Frequency Kernel (40x20)")
 plt.xlabel("Time bins")
