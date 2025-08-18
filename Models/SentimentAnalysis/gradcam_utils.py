@@ -5,7 +5,7 @@ import csv
 import re
 from collections import defaultdict
 from pathlib import Path
-from typing import Tuple, List
+from typing import Tuple
 
 import librosa
 import matplotlib.pyplot as plt
@@ -22,7 +22,7 @@ from Models.SentimentAnalysis.Visualizations import plot_mel_spectrogram
 from Preprocess import audio_to_mel_spectrogram
 from PreprocessParams import MAX_SPECTOGRAM_DURATION_IN_SECONDS
 from audio_dataset import EmotionSpecDataset
-from correlation_kernel_playground import K_vert_5x3
+from correlation_kernel_playground import kernel_list
 
 # Audio params
 FREQUENCY_BIN_COUNT = 64
@@ -127,7 +127,6 @@ def build_correlation_kernel(freq_bins = 20, time_bins = 40) -> np.ndarray:
 #         ax.plot([t0, t1], [v0, v1], color=color, linewidth=linewidth)
 
 # Left for hand_picking only!
-correlation_kernel = K_vert_5x3
 
 RECORDINGS_TO_PROCESS_HANDPICKED = []
 
@@ -172,8 +171,12 @@ for wav_path in RECORDINGS_TO_PROCESS:
 # --------------------------------------------------------------
 # 4.  Create and save composite plots per emotion-actor
 # --------------------------------------------------------------
+
+plot_cc = False
 for emotion, actor_dict in emotion_to_actor_sentence_repetition.items():
     print(f"\n===> Processing emotion: {emotion}")
+
+    plot_cc = True if emotion in kernel_list else False
 
     for actor, combo_dict in actor_dict.items():
         print(f"  Actor {actor}")
@@ -183,6 +186,7 @@ for emotion, actor_dict in emotion_to_actor_sentence_repetition.items():
         sorted_keys = sorted(combo_dict.keys(), key=lambda x: (x[0], x[1]))  # (statement, repetition)
 
         img2 = None
+        img3 = None
         for col_idx, (statement, repetition) in enumerate(sorted_keys):
             wav_path = combo_dict[(statement, repetition)]
             print(f"    Statement {statement}, Repetition {repetition} → {wav_path.name}")
@@ -250,7 +254,7 @@ for emotion, actor_dict in emotion_to_actor_sentence_repetition.items():
             strong_activation_mask = (alpha_mask >= threshold).astype(np.float32)
 
             # Apply the mask to the original spectrogram (not RGB)
-            masked_spec = raw_spec * strong_activation_mask
+            masked_spec = np.where(strong_activation_mask > 0, raw_spec, -80.0)
 
             # Plot using librosa with a colormap (e.g., magma, viridis)
             img2 = librosa.display.specshow(
@@ -267,17 +271,20 @@ for emotion, actor_dict in emotion_to_actor_sentence_repetition.items():
             axes[1, col_idx].set_xlabel("Time (s)")
             axes[1, col_idx].set_ylabel("Freq (Hz)")
 
-            corr = correlate2d(masked_spec, correlation_kernel, mode='full', boundary='symm')
+            if plot_cc:
+                masked_spec_shift = masked_spec - np.min(masked_spec)
+                corr = correlate2d(masked_spec_shift, kernel_list[emotion])
 
-            # Normalize correlation to [-1,1] for visualization
-            corr /= np.max(np.abs(corr)) + 1e-12
+                # Normalize correlation to [-1,1] for visualization
+                corr /= np.max(np.abs(corr)) + 1e-12
 
-            # --- 5. Plot cross-correlation map ---
-            im3 = axes[2, col_idx].imshow(corr, aspect='auto', origin='lower', cmap='RdBu_r', extent=[0, raw_spec.shape[1] * HOP_LENGTH / SAMPLE_RATE, 0, SAMPLE_RATE // 2])
-            axes[2, col_idx].set_title("Cross-Correlation with Smooth Flat Kernel")
-            if col_idx == axes.shape[1] - 1:  # last column
-                cbar = plt.colorbar(im3, ax=axes[2, :], orientation='horizontal', label='Correlation')
+                # --- 5. Plot cross-correlation map ---
+                img3 = axes[2, col_idx].imshow(corr, aspect='auto', origin='lower', cmap='RdBu_r', extent=[0, raw_spec.shape[1] * HOP_LENGTH / SAMPLE_RATE, 0, SAMPLE_RATE // 2])
+                axes[2, col_idx].set_title("Cross-Correlation with Smooth Flat Kernel")
+                #if col_idx == axes.shape[1] - 1:  # last column
 
+        if plot_cc:
+            cbar_corr = plt.colorbar(img3, ax=axes[2, :], orientation='horizontal', label='Correlation')
         cbar_spec = fig.colorbar(img2, ax=axes[1, :], orientation='horizontal')
         cbar_spec.set_label("Spectrogram Magnitude (dB)")
         save_folder = Path("Benchmark_Results") / "Summary_By_Actor" / actor
