@@ -29,3 +29,11 @@ RAVDESS
 CREMA-D
 
 *.png
+*.pt
+*.zip
+
+attributes/
+training_results/
+heatmap_plots/
+
+TESS
