@@ -555,8 +555,72 @@ def CREATE_ALL_CONCEPT_DIRS():
         n_samples=samples_count,
         seed=random_seed
     )
-    
+
+
+def generate_random_pattern_spectrogram(freq_count = FREQS, frames=FRAMES, pattern_type: Optional[str] = None,
+                                        rng: Optional[np.random.Generator] = None) -> np.ndarray:
+    """
+    Generate a random/unrealistic spectrogram pattern for testing.
+
+    Args:
+        freq_count: Number of frequency bins (rows).
+        frames: Number of time frames (columns).
+        pattern_type: Type of pattern to generate:
+            'solid', 'white_noise', 'dotted', 'stripes', or None for random choice.
+        rng: Optional NumPy Generator for reproducibility.
+
+    Returns:
+        2D ndarray of shape [freq_count, frames] with values normalized to [0, 1].
+    """
+    rng = rng or np.random.default_rng()
+
+    if pattern_type is None:
+        pattern_type = rng.choice(['solid', 'white_noise', 'dotted', 'stripes'])
+
+    S = np.zeros((freq_count, frames), dtype=np.float32)
+
+    if pattern_type == 'solid':
+        # Fill with a single random value
+        S.fill(rng.uniform(0.2, 0.8))
+
+    elif pattern_type == 'white_noise':
+        # Random Gaussian noise
+        S = rng.normal(0.5, 0.25, size=(freq_count, frames)).astype(np.float32)
+
+    elif pattern_type == 'dotted':
+        # Sparse dots across the spectrogram
+        dot_count = rng.integers(freq_count * frames // 50, freq_count * frames // 20)
+        for _ in range(dot_count):
+            x = rng.integers(0, frames)
+            y = rng.integers(0, freq_count)
+            S[y, x] = rng.uniform(0.6, 1.0)
+
+    elif pattern_type == 'stripes':
+        # Horizontal or vertical stripes
+        stripe_orientation = rng.choice(['horizontal', 'vertical'])
+        stripe_width = rng.integers(1, max(2, min(freq_count, frames) // 10))
+        if stripe_orientation == 'horizontal':
+            for y in range(0, freq_count, stripe_width * 2):
+                S[y:y + stripe_width, :] = rng.uniform(0.5, 1.0)
+        else:
+            for x in range(0, frames, stripe_width * 2):
+                S[:, x:x + stripe_width] = rng.uniform(0.5, 1.0)
+
+    # Clamp and normalize to [0,1]
+    S -= S.min()
+    if S.max() > 0:
+        S /= S.max()
+
+    return S.astype(np.float32)
+
+
 if __name__ == "__main__":
+    #random_negatives = [generate_random_pattern_spectrogram(FREQS, FRAMES) for _ in range(10)]
+    # S1 = generate_random_pattern_spectrogram(FREQS, FRAMES, pattern_type='solid')
+    # S2 = generate_random_pattern_spectrogram(FREQS, FRAMES, pattern_type='white_noise')
+    # S3 = generate_random_pattern_spectrogram(FREQS, FRAMES)  # random pattern
+    #show_arrays_in_separate_windows(random_negatives, titles=["Random" for _ in range(10)])
     
     # CREATE_ALL_CONCEPT_DIRS()
-    TEST_generate_concept_patch()
+    #TEST_generate_concept_patch()
+    pass
