@@ -556,6 +556,16 @@ def CREATE_ALL_CONCEPT_DIRS():
         seed=random_seed
     )
 
+def TEST_generate_random_pattern_spectrogram(pattern_type=None):
+    random_negatives = [
+        generate_random_pattern_spectrogram(pattern_type=pattern_type)
+        for _ in range(3)
+    ]
+
+    for i, line in enumerate(random_negatives):
+        plot_mel_spectrogram(line, block=False)
+    
+    plt.show()
 
 def generate_random_pattern_spectrogram(freq_count = FREQS, frames=FRAMES, pattern_type: Optional[str] = None,
                                         rng: Optional[np.random.Generator] = None) -> np.ndarray:
@@ -623,4 +633,5 @@ if __name__ == "__main__":
     
     # CREATE_ALL_CONCEPT_DIRS()
     #TEST_generate_concept_patch()
+    # TEST_generate_random_pattern_spectrogram(pattern_type='solid')
     pass
