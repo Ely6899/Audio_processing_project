@@ -1,141 +1,4 @@
-# --------------------------------------------------------------
-# 0.  Imports – add only TWO lines
-# --------------------------------------------------------------
-import csv
-import re
-from collections import defaultdict
-from pathlib import Path
-from typing import Tuple
-
-import librosa
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-import torch
-from scipy.signal import correlate2d
-from pytorch_grad_cam import GradCAM
-from pytorch_grad_cam.utils.image import show_cam_on_image
-from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
-
-from Models.SentimentAnalysis.ConstPaths import RavdessPaths
-from Models.SentimentAnalysis.Visualizations import plot_mel_spectrogram
-from Preprocess import audio_to_mel_spectrogram
-from PreprocessParams import MAX_SPECTOGRAM_DURATION_IN_SECONDS
-from audio_dataset import EmotionSpecDataset
-from correlation_kernel_playground import kernel_list
-
-# Audio params
-FREQUENCY_BIN_COUNT = 64
-SAMPLE_RATE = 16000
-N_FFT = 512
-WINDOW_LENGTH = N_FFT
-HOP_LENGTH = N_FFT // 2
-MAX_SAMPLES = int(MAX_SPECTOGRAM_DURATION_IN_SECONDS * SAMPLE_RATE)
-TARGET_FRAMES = (MAX_SAMPLES - WINDOW_LENGTH) // HOP_LENGTH + 1
-
-# Filter options
-EMOTIONS_TO_INCLUDE = ['01', '02', '03', '04', '05', '06', '07', '08']
-ACTORS_TO_INCLUDE = [f"{i:02d}" for i in range(1, 25)]
-STATEMENTS_TO_INCLUDE = ['01', '02']
-REPETITION_TO_INCLUDE = ['01', '02']
-INTENSITY_TO_INCLUDE = ['02']
-
-index_emotion_mapping = {
-    '01': 'neutral', '02': 'calm', '03': 'happy', '04': 'sad',
-    '05': 'angry', '06': 'fearful', '07': 'disgust', '08': 'surprised',
-}
-
-label_emotion_mapping = {
-    0: 'angry', 1: 'calm', 2: 'disgust', 3: 'fearful',
-    4: 'happy', 5: 'neutral', 6: 'sad', 7: 'surprised',
-}
-
-def wav_indexer(file_name: Path) -> Tuple[str, str]:
-    numbers = re.findall(r'\d+', file_name.name.__str__())
-    emotion_index = numbers[2]
-    actor_number = numbers[-1]
-    emotion = index_emotion_mapping[emotion_index]
-    return emotion, actor_number
-
-def is_valid_ravdess_file(path: Path) -> bool:
-    if "_" in path.stem:
-        return False  # augmented file
-
-    parts = path.stem.split("-")
-    if len(parts) != 7:
-        return False  # malformed filename
-
-    emotion, intensity, statement, repetition, actor = parts[2], parts[3], parts[4], parts[5], parts[6]
-    return (
-        emotion in EMOTIONS_TO_INCLUDE and
-        intensity in INTENSITY_TO_INCLUDE and
-        statement in STATEMENTS_TO_INCLUDE and
-        repetition in REPETITION_TO_INCLUDE and
-        actor in ACTORS_TO_INCLUDE
-    )
-
-def build_correlation_kernel(freq_bins = 20, time_bins = 40) -> np.ndarray:
-    # Create smooth frequency profile: almost flat, small gentle slope
-    freq_profile = np.linspace(1, 0.9, freq_bins)[:, np.newaxis]  # very gentle high→low
-
-    # Smooth time modulation: soft sine wave
-    time_profile = np.sin(np.linspace(0, np.pi, time_bins))[np.newaxis, :]
-
-    # Combine profiles to get 2D kernel
-    kernel = freq_profile * time_profile  # element-wise multiplication
-
-    # Normalize: zero-mean and unit-norm
-    kernel -= kernel.mean()
-    kernel /= np.linalg.norm(kernel) + 1e-12
-
-    return kernel
-
-# def extract_important_time_regions(cam_mask: np.ndarray,
-#                                    sample_rate: int,
-#                                    hop_length: int,
-#                                    threshold_quantile: float = 0.9) -> List[Tuple[float, float]]:
-#     time_importance = cam_mask.mean(axis=0)
-#     threshold = np.quantile(time_importance, threshold_quantile)
-#     high_activation = time_importance >= threshold
-#
-#     regions = []
-#     start_idx = None
-#     for idx, is_high in enumerate(high_activation):
-#         if is_high and start_idx is None:
-#             start_idx = idx
-#         elif not is_high and start_idx is not None:
-#             end_idx = idx
-#             start_time = start_idx * hop_length / sample_rate
-#             end_time = end_idx * hop_length / sample_rate
-#             regions.append((start_time, end_time))
-#             start_idx = None
-#     if start_idx is not None:
-#         end_idx = len(high_activation)
-#         start_time = start_idx * hop_length / sample_rate
-#         end_time = end_idx * hop_length / sample_rate
-#         regions.append((start_time, end_time))
-#     return regions
-#
-# def plot_segmented_line(ax, times: np.ndarray, values: np.ndarray,
-#                         highlight_regions: List[Tuple[float, float]],
-#                         base_color='gray', highlight_color='crimson', linewidth=2):
-#     for i in range(len(times)-1):
-#         t0, t1 = times[i], times[i+1]
-#         v0, v1 = values[i], values[i+1]
-#         mid = 0.5*(t0+t1)
-#         color = highlight_color if any(start <= mid <= end for start, end in highlight_regions) else base_color
-#         ax.plot([t0, t1], [v0, v1], color=color, linewidth=linewidth)
-
-# Left for hand_picking only!
-
-RECORDINGS_TO_PROCESS_HANDPICKED = []
-
-# For automated picking!
-RECORDINGS_TO_PROCESS = []
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = torch.load(Path("ResNetWithAttention.pt"), map_location=device, weights_only=False)
-model.eval()
+from Models.SentimentAnalysis.gradcam_initilaization import *
 
 PANDAS_FLAG: bool | None = True
 RECORDINGS_TO_PROCESS = []
@@ -153,7 +16,7 @@ else:
     ]
 
 # --------------------------------------------------------------
-# 3.  Group by emotion, actor, statement+repetition
+# 3.  Group by emotion, actor, statement+repetition => returns "emotion_to_actor_sentence_repetition[emotion][actor][key] = wav_path"
 # --------------------------------------------------------------
 emotion_to_actor_sentence_repetition = defaultdict(lambda: defaultdict(dict))
 
@@ -168,15 +31,17 @@ for wav_path in RECORDINGS_TO_PROCESS:
     if actor in ACTORS_TO_INCLUDE and emotion in index_emotion_mapping.values():
         emotion_to_actor_sentence_repetition[emotion][actor][key] = wav_path
 
+
+
 # --------------------------------------------------------------
-# 4.  Create and save composite plots per emotion-actor
+# 4.  Create and save composite plots per emotion-actor # goes through emotion_to_actor_sentence_repetition => plots ALL the composite graphs
 # --------------------------------------------------------------
 
 plot_cc = False
 for emotion, actor_dict in emotion_to_actor_sentence_repetition.items():
     print(f"\n===> Processing emotion: {emotion}")
 
-    plot_cc = True if emotion in kernel_list else False
+    plot_cc = True if emotion in kernel_list else False # whether to plot the correlation map or not
 
     for actor, combo_dict in actor_dict.items():
         print(f"  Actor {actor}")
@@ -250,7 +115,7 @@ for emotion, actor_dict in emotion_to_actor_sentence_repetition.items():
             alpha_mask = np.clip(cam_mask, 0, 1)
 
             # Keep only yellow-red regions (~ top 30% of activation)
-            threshold = np.quantile(alpha_mask, 0.88) #84%, 86%, 88%, 90%(?),
+            threshold = np.quantile(alpha_mask, 0.92) #84%, 86%, 88%, 90%(?),
             strong_activation_mask = (alpha_mask >= threshold).astype(np.float32)
 
             # Apply the mask to the original spectrogram (not RGB)
@@ -304,74 +169,3 @@ from sklearn.preprocessing import StandardScaler
 # rms_vectors = []
 # f0_vectors = []
 # emotion_labels = []
-
-# print("\n===> Gathering data for PCA summary...")
-#
-# for emotion, actor_dict in emotion_to_actor_sentence_repetition.items():
-#     for actor, combo_dict in actor_dict.items():
-#         for (statement, repetition), wav_path in combo_dict.items():
-#             y, sr = librosa.load(wav_path, mono = True, sr=SAMPLE_RATE)
-#
-#             # RMS feature
-#             rms = librosa.feature.rms(y=y, frame_length=WINDOW_LENGTH, hop_length=HOP_LENGTH)[0]
-#             rms = np.interp(np.linspace(0, len(rms) - 1, 100), np.arange(len(rms)), rms)
-#             rms_vectors.append(rms)
-#
-#             # F0 feature (handle NaNs)
-#             f0, _, _ = librosa.pyin(
-#                 y, fmin=librosa.note_to_hz('C2'), fmax=librosa.note_to_hz('C7'),
-#                 sr=sr, hop_length=HOP_LENGTH)
-#             f0 = pd.Series(f0).interpolate(limit_direction="both").bfill().ffill().to_numpy()
-#             f0 = np.interp(np.linspace(0, len(f0) - 1, 100), np.arange(len(f0)), f0)
-#             f0_vectors.append(f0)
-#
-#             emotion_labels.append(emotion)
-#
-# rms_matrix = np.vstack(rms_vectors)
-# f0_matrix = np.vstack(f0_vectors)
-#
-# def pca_and_plot(data_matrix, labels, feature_name, axes_2d, axes_3d):
-#     scaler = StandardScaler()
-#     data_scaled = scaler.fit_transform(data_matrix)
-#
-#     pca = PCA(n_components=3)
-#     data_pca = pca.fit_transform(data_scaled)
-#
-#     unique_labels = sorted(set(labels))
-#     colors = plt.cm.tab10.colors
-#     label_to_color = {label: colors[i % len(colors)] for i, label in enumerate(unique_labels)}
-#
-#     for label in unique_labels:
-#         mask = np.array(labels) == label
-#         axes_2d.scatter(data_pca[mask, 0], data_pca[mask, 1],
-#                         label=label, color=label_to_color[label], alpha=0.7)
-#     axes_2d.set_title(f"{feature_name} – PCA 2D")
-#     axes_2d.set_xlabel("PC1")
-#     axes_2d.set_ylabel("PC2")
-#     axes_2d.legend()
-#
-#     for label in unique_labels:
-#         mask = np.array(labels) == label
-#         axes_3d.scatter(data_pca[mask, 0], data_pca[mask, 1], data_pca[mask, 2],
-#                         label=label, color=label_to_color[label], alpha=0.7)
-#     axes_3d.set_title(f"{feature_name} – PCA 3D")
-#     axes_3d.set_xlabel("PC1")
-#     axes_3d.set_ylabel("PC2")
-#     axes_3d.set_zlabel("PC3")
-#
-# fig = plt.figure(figsize=(16, 10))
-# ax_rms_2d = fig.add_subplot(2, 2, 1)
-# ax_f0_2d = fig.add_subplot(2, 2, 2)
-# ax_rms_3d = fig.add_subplot(2, 2, 3, projection='3d')
-# ax_f0_3d = fig.add_subplot(2, 2, 4, projection='3d')
-#
-# pca_and_plot(rms_matrix, emotion_labels, "RMS", ax_rms_2d, ax_rms_3d)
-# pca_and_plot(f0_matrix, emotion_labels, "F0", ax_f0_2d, ax_f0_3d)
-#
-# plt.tight_layout()
-# summary_dir = Path("Benchmark_Results") / "Summary_By_Actor"
-# summary_dir.mkdir(parents=True, exist_ok=True)
-# save_pca_path = summary_dir / "PCA_Overview.png"
-# plt.savefig(save_pca_path)
-# #plt.show()
-# print(f"Saved PCA plot: {save_pca_path}")
