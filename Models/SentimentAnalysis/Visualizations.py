@@ -75,7 +75,7 @@ def plot_waveform(waveform, sample_rate):
     plt.tight_layout()
     plt.show()
 
-def plot_mel_spectrogram(mel_spec, sr=SAMPLE_RATE, hop_length=HOP_LENGTH):
+def plot_mel_spectrogram(mel_spec, sr=SAMPLE_RATE, hop_length=HOP_LENGTH, block=True):
     """
     Plot a mel spectrogram.
     """
@@ -89,7 +89,7 @@ def plot_mel_spectrogram(mel_spec, sr=SAMPLE_RATE, hop_length=HOP_LENGTH):
     plt.xlabel('Time (s)')
     plt.ylabel('Frequency (Hz)')
     plt.tight_layout()
-    plt.show()
+    plt.show(block=block)
 
 def plot_loss_per_epoch(
                         file_save_name: str,
@@ -260,3 +260,6 @@ def save_mel_spectrogram(
         
     plt.savefig(final_path, bbox_inches="tight")
     plt.close()  # Close the figure to free memory
+    
+    
+    
