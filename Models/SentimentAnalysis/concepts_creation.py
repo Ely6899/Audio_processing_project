@@ -625,13 +625,4 @@ def generate_random_pattern_spectrogram(freq_count = FREQS, frames=FRAMES, patte
 
 
 if __name__ == "__main__":
-    #random_negatives = [generate_random_pattern_spectrogram(FREQS, FRAMES) for _ in range(10)]
-    # S1 = generate_random_pattern_spectrogram(FREQS, FRAMES, pattern_type='solid')
-    # S2 = generate_random_pattern_spectrogram(FREQS, FRAMES, pattern_type='white_noise')
-    # S3 = generate_random_pattern_spectrogram(FREQS, FRAMES)  # random pattern
-    #show_arrays_in_separate_windows(random_negatives, titles=["Random" for _ in range(10)])
-    
-    # CREATE_ALL_CONCEPT_DIRS()
-    #TEST_generate_concept_patch()
-    # TEST_generate_random_pattern_spectrogram(pattern_type='solid')
-    pass
+    CREATE_ALL_CONCEPT_DIRS()
