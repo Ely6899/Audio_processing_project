@@ -1,20 +1,22 @@
-import pandas as pd
-import torch
-import numpy as np
 from pathlib import Path
-from captum.concept import TCAV, Concept
-#from captum.attr import LayerActivation
+# from captum.attr import LayerActivation
 # from functorch.dim import Tensor #! makes a bug because functorch.dim isn't supported in python 3.12 !!
 from typing import Optional
+
+import numpy as np
+import pandas as pd
+import torch
+from captum.concept import TCAV, Concept
 from torch.utils.data import DataLoader, Dataset
+
 from Preprocess import audio_to_mel_spectrogram
-from concepts_creation import generate_random_pattern_spectrogram, show_arrays_in_separate_windows
-from PreprocessParams import MAX_SPECTOGRAM_DURATION_IN_SECONDS, TARGET_FRAMES, FREQUENCY_BIN_COUNT, HOP_LENGTH, SAMPLE_RATE
+from PreprocessParams import TARGET_FRAMES, FREQUENCY_BIN_COUNT
+from concepts_creation import generate_random_pattern_spectrogram
 
 
 class PreGeneratedRandomSpectrogramDataset(Dataset):
     """
-    PyTorch Dataset that pre-generates all random spectrograms in memory.
+    PyTorch Dataset that pre-generates all random spectrogram in memory.
     """
 
     def __init__(self, n_samples: int, freq_count = FREQUENCY_BIN_COUNT, frames = TARGET_FRAMES, rng_seed: Optional[int] = None):
@@ -42,7 +44,7 @@ class PreGeneratedRandomSpectrogramDataset(Dataset):
     
 class PreGeneratedConceptDataset(Dataset):
     """
-    PyTorch Dataset that pre-generates the dataset for a spesific concept in memory.
+    PyTorch Dataset that pre-generates the dataset for a specific concept in memory.
     """
 
     def __init__(self, n_samples: int, concept_name: str, root_concept_dir: Path = Path("positive concepts dataset") , freq_count = FREQUENCY_BIN_COUNT, frames_count = TARGET_FRAMES, rng_seed: Optional[int] = None):
@@ -56,6 +58,7 @@ class PreGeneratedConceptDataset(Dataset):
         # load all .npy files from root_concept_dir/concept_name
         self.data = []
         concept_dir = self.root_concept_dir / self.concept_name
+        concept_dir.mkdir(exist_ok=True)
         for npy_file in concept_dir.glob("*.npy"):
             self.data.append(np.load(npy_file))
         self.data = np.array(self.data)
@@ -99,7 +102,7 @@ label_emotion_mapping = {
 }
 
 def get_emotion_tensor(emotion_label: str, drop_false_positive: bool) -> torch.Tensor:
-    '''
+    """
     return emotion tensor containing all the spectrograms that the model predicted as "emotion_label"
 
     Args:
@@ -108,7 +111,7 @@ def get_emotion_tensor(emotion_label: str, drop_false_positive: bool) -> torch.T
 
     Returns:
         torch.Tensor: A tensor containing the spectrograms for the specified emotion label. in shape: [Batch, 1, Height, Width]
-    '''
+    """
     df = pd.read_csv("attributes/all_attributes.csv")
 
     df_emotion = df[(df["predicted_label"] == emotion_label) & (df["true_label"] == emotion_label)]["path"] if drop_false_positive else df[(df["predicted_label"] == emotion_label)]["path"]
