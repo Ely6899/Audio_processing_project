@@ -1,6 +1,9 @@
+from IPython.display import display
+
 from pathlib import Path
 # from captum.attr import LayerActivation
 # from functorch.dim import Tensor #! makes a bug because functorch.dim isn't supported in python 3.12 !!
+from pprint import pprint
 from typing import Optional
 
 import numpy as np
@@ -128,12 +131,54 @@ def get_emotion_tensor(emotion_label: str, drop_false_positive: bool) -> torch.T
         
     return emotion_tensor
 
+def tcav_scores_to_df(scores_by_label: dict, concept_names: list[str]) -> pd.DataFrame:
+    """
+    Flatten Captum TCAV results into a DataFrame with:
+    columns = ["label_name", "concept_name", "layer_name", "positive_sign_count", "positive_magnitude"]
+    """
+    rows = []
+    for label_name, exp_sets in scores_by_label.items():
+        # exp_key looks like "0-12" where 0 is the positive concept index, 12 is random/baseline
+        for exp_key, layer_dict in exp_sets.items():
+            try:
+                pos_idx = int(str(exp_key).split("-")[0])
+            except Exception:
+                continue  # skip malformed keys
+            if not (0 <= pos_idx < len(concept_names)):
+                continue
+            concept_name = concept_names[pos_idx]
+
+            # Usually there's a single chosen layer, but handle multiple layers just in case
+            for layer_name, metrics in layer_dict.items():
+                sc = metrics.get("sign_count")
+                mg = metrics.get("magnitude")
+                if sc is None or mg is None:
+                    continue
+
+                # Convert torch tensors to Python floats
+                if isinstance(sc, torch.Tensor):
+                    sc = sc.detach().cpu().tolist()
+                if isinstance(mg, torch.Tensor):
+                    mg = mg.detach().cpu().tolist()
+
+                # Positive direction = index 0
+                rows.append({
+                    "label_name": label_name,
+                    "concept_name": concept_name,
+                    "layer_name": layer_name,
+                    "positive_sign_count": float(sc[0]),
+                    "positive_magnitude": float(mg[0]),
+                })
+
+    return pd.DataFrame(rows, columns=[
+        "label_name", "concept_name", "layer_name", "positive_sign_count", "positive_magnitude"
+    ])
+
 # store spectrograms of each emotion in Tensor object.
 label_inputs = {
     label_name: get_emotion_tensor(label_name, drop_false_positive=True)
     for label_name in label_emotion_mapping.values()
 }
-
 
 
 # -----------------------------
@@ -182,5 +227,10 @@ for label_index, label_name in label_emotion_mapping.items():
 # 4️⃣ Inspect results
 # -----------------------------
 
-for label_name, score_dict in tcav_scores_per_label.items():
-     print(f"TCAV scores for label {label_name}: {score_dict}")
+pprint(tcav_scores_per_label)
+
+# pprint(f"TCAV scores for label {'angry'}: {tcav_scores_per_label['angry']}", depth=1)
+
+df_tcav = tcav_scores_to_df(tcav_scores_per_label, concept_unique_names)
+
+display(df_tcav)
