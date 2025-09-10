@@ -28,6 +28,50 @@ sys.path.append(DEFAULT_CREMAD_ROOT)
 CREMAD_ROOT = CremaPaths.WAV_DATA  # <-- set your path
 device="cpu"
 
+CONCEPT_UNIQUE_NAMES = [
+                        "long_constant_thick",
+                        "long_dropping_flat_thick",
+                        "long_dropping_steep_thick",
+                        "long_dropping_steep_thin",
+                        "long_rising_flat_thick",
+                        "long_rising_steep_thick",
+                        "long_rising_steep_thin",
+                        "short_constant_thick",
+                        "short_dropping_steep_thick",
+                        "short_dropping_steep_thin",
+                        "short_rising_steep_thick",
+                        "short_rising_steep_thin"
+                        ]
+
+
+LABEL_EMOTION_MAPPING = {
+    0: 'angry',
+    1: 'disgust',
+    2: 'fearful',
+    3: 'happy',
+    4: 'neutral',
+    5: 'sad',
+}
+
+# optional short-code map from filename to label name
+EMO_CODE_TO_NAME = {
+    'ANG': 'angry',
+    'DIS': 'disgust',
+    'FEA': 'fearful',
+    'HAP': 'happy',
+    'NEU': 'neutral',
+    'SAD': 'sad',
+}
+
+ALLOWED_EMOTIONS = {"ANG", "DIS", "FEA", "HAP", "NEU", "SAD"}
+
+CREMAD_PATTERN = re.compile(
+    r'^(?P<actor>\d{4})_(?P<utt>[A-Z]{3})_(?P<emo>[A-Z]{3})_(?P<intensity>[A-Z]{2})\.wav$'
+)
+
+EMO_RE = re.compile(r"_(ANG|DIS|FEA|HAP|NEU|SAD)_", re.IGNORECASE)
+
+
 class PreGeneratedRandomSpectrogramDataset(Dataset):
     """
     PyTorch Dataset that pre-generates all random spectrogram in memory.
@@ -90,46 +134,6 @@ class PreGeneratedConceptDataset(Dataset):
     def get_data(self):
         return self.data
 
-CONCEPT_UNIQUE_NAMES = [
-                        "long_constant_thick",
-                        "long_dropping_flat_thick",
-                        "long_dropping_steep_thick",
-                        "long_dropping_steep_thin",
-                        "long_rising_flat_thick",
-                        "long_rising_steep_thick",
-                        "long_rising_steep_thin",
-                        "short_constant_thick",
-                        "short_dropping_steep_thick",
-                        "short_dropping_steep_thin",
-                        "short_rising_steep_thick",
-                        "short_rising_steep_thin"
-                        ]
-
-
-LABEL_EMOTION_MAPPING = {
-    0: 'angry',
-    1: 'disgust',
-    2: 'fearful',
-    3: 'happy',
-    4: 'neutral',
-    5: 'sad',
-}
-
-# optional short-code map from filename to label name
-EMO_CODE_TO_NAME = {
-    'ANG': 'angry',
-    'DIS': 'disgust',
-    'FEA': 'fearful',
-    'HAP': 'happy',
-    'NEU': 'neutral',
-    'SAD': 'sad',
-}
-
-ALLOWED_EMOTIONS = {"ANG", "DIS", "FEA", "HAP", "NEU", "SAD"}
-
-CREMAD_PATTERN = re.compile(
-    r'^(?P<actor>\d{4})_(?P<utt>[A-Z]{3})_(?P<emo>[A-Z]{3})_(?P<intensity>[A-Z]{2})\.wav$'
-)
 
 def parse_cremad_filename(path: Path) -> Optional[Tuple[str, str, str, str]]:
     """
@@ -316,8 +320,6 @@ def _get_tcav_dict_per_sample(all_filtered_data: pd.DataFrame):
         
     
     return tcav_dict_per_sample
-
-EMO_RE = re.compile(r"_(ANG|DIS|FEA|HAP|NEU|SAD)_", re.IGNORECASE)
 
 def parse_cremad_emotion(p: Path):
     m = EMO_RE.search(p.name.upper())
