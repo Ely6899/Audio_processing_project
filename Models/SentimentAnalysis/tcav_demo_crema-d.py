@@ -6,7 +6,14 @@ from torch.utils.data import DataLoader, Dataset
 from typing import Optional
 from pathlib import Path
 import sys
-
+import re
+import random
+import torch
+import numpy as np
+from typing import Dict, List
+from pathlib import Path
+from typing import Optional, Tuple, List, Dict
+from tqdm import tqdm
 from Preprocess import audio_to_mel_spectrogram
 from PreprocessParams import TARGET_FRAMES, FREQUENCY_BIN_COUNT, MAX_SPECTOGRAM_DURATION_IN_SECONDS
 from concepts_creation import generate_random_pattern_spectrogram
@@ -20,7 +27,6 @@ sys.path.append(DEFAULT_CREMAD_ROOT)
 
 CREMAD_ROOT = CremaPaths.WAV_DATA  # <-- set your path
 device="cpu"
-N_SAMPLES_PER_LABEL = 100  # <-- how many spectrograms per class you want
 
 class PreGeneratedRandomSpectrogramDataset(Dataset):
     """
@@ -84,7 +90,7 @@ class PreGeneratedConceptDataset(Dataset):
     def get_data(self):
         return self.data
 
-concept_unique_names = [
+CONCEPT_UNIQUE_NAMES = [
                         "long_constant_thick",
                         "long_dropping_flat_thick",
                         "long_dropping_steep_thick",
@@ -100,7 +106,7 @@ concept_unique_names = [
                         ]
 
 
-label_emotion_mapping = {
+LABEL_EMOTION_MAPPING = {
     0: 'angry',
     1: 'disgust',
     2: 'fearful',
@@ -110,7 +116,7 @@ label_emotion_mapping = {
 }
 
 # optional short-code map from filename to label name
-cremad_code_to_name = {
+EMO_CODE_TO_NAME = {
     'ANG': 'angry',
     'DIS': 'disgust',
     'FEA': 'fearful',
@@ -119,11 +125,7 @@ cremad_code_to_name = {
     'SAD': 'sad',
 }
 
-allowed_emotions = {"ANG", "DIS", "FEA", "HAP", "NEU", "SAD"}
-
-import re
-from pathlib import Path
-from typing import Optional, Tuple, List, Dict
+ALLOWED_EMOTIONS = {"ANG", "DIS", "FEA", "HAP", "NEU", "SAD"}
 
 CREMAD_PATTERN = re.compile(
     r'^(?P<actor>\d{4})_(?P<utt>[A-Z]{3})_(?P<emo>[A-Z]{3})_(?P<intensity>[A-Z]{2})\.wav$'
@@ -154,34 +156,25 @@ def list_cremad_files(root: Path, allowed_emotions: Optional[set] = None) -> Lis
         if not parsed:
             continue
         _, _, emo_code, _ = parsed
-        if allowed_emotions is None or emo_code in allowed_emotions:
+        if ALLOWED_EMOTIONS is None or emo_code in ALLOWED_EMOTIONS:
             wavs.append(p)
     return wavs
 
 def group_by_emotion_cremad(paths: List[Path]) -> Dict[str, List[Path]]:
     """
-    Group paths by normalized label name using `cremad_code_to_name`.
+    Group paths by normalized label name using `emo_code_to_name`.
     """
-    buckets: Dict[str, List[Path]] = {name: [] for name in cremad_code_to_name.values()}
+    buckets: Dict[str, List[Path]] = {name: [] for name in EMO_CODE_TO_NAME.values()}
     for p in paths:
         parsed = parse_cremad_filename(p)
         if not parsed:
             continue
         _, _, emo_code, _ = parsed
-        if emo_code in cremad_code_to_name:
-            label_name = cremad_code_to_name[emo_code]
+        if emo_code in EMO_CODE_TO_NAME:
+            label_name = EMO_CODE_TO_NAME[emo_code]
             buckets[label_name].append(p)
     # Remove empties to avoid surprises
     return {k: v for k, v in buckets.items() if len(v) > 0}
-
-import random
-import torch
-import numpy as np
-from typing import Callable, Dict, List
-
-# You already have these:
-# from Preprocess import audio_to_mel_spectrogram
-# from PreprocessParams import MAX_SPECTOGRAM_DURATION_IN_SECONDS
 
 
 def get_emotion_tensor_cremad(
@@ -192,7 +185,7 @@ def get_emotion_tensor_cremad(
     n_samples: int | None = None,
 ):
     # 1. List all matching WAV paths for this label
-    all_paths = list_cremad_files(root, allowed_emotions=allowed_emotions)
+    all_paths = list_cremad_files(root, allowed_emotions=ALLOWED_EMOTIONS)
     by_label = group_by_emotion_cremad(all_paths)
 
     if label_name not in by_label or len(by_label[label_name]) == 0:
@@ -223,13 +216,13 @@ def get_emotion_tensor_cremad(
 
     return batch.to(device=device)
 
-def tcav_scores_to_df(scores_by_label: dict, concept_names: list[str]) -> pd.DataFrame:
-    """
-    Flatten Captum TCAV results into a DataFrame with:
-    columns = ["label_name", "concept_name", "layer_name", "positive_sign_count", "positive_magnitude"]
-    """
+def _tcav_dict_per_sample_to_df(scores_by_sample: dict, concept_names: list[str]) -> pd.DataFrame:
+    # """
+    # Flatten Captum TCAV results into a DataFrame with:
+    # columns = ["label_name", "concept_name", "layer_name", "positive_percentage", "magnitude"]
+    # """
     rows = []
-    for label_name, exp_sets in scores_by_label.items():
+    for path, exp_sets in scores_by_sample.items():
         # exp_key looks like "0-12" where 0 is the positive concept index, 12 is random/baseline
         for exp_key, layer_dict in exp_sets.items():
             try:
@@ -255,87 +248,128 @@ def tcav_scores_to_df(scores_by_label: dict, concept_names: list[str]) -> pd.Dat
 
                 # Positive direction = index 0
                 rows.append({
-                    "label_name": label_name,
+                    "path": path,
                     "concept_name": concept_name,
                     "layer_name": layer_name,
-                    "positive_sign_count": float(sc[0]),
-                    "positive_magnitude": float(mg[0]),
+                    "positive_percentage": float(sc[0]),
+                    "magnitude": float(mg[0]),
                 })
 
     return pd.DataFrame(rows, columns=[
-        "label_name", "concept_name", "layer_name", "positive_sign_count", "positive_magnitude"
+        "path", "concept_name", "layer_name", "positive_percentage", "magnitude"
     ])
+    
+def _get_tcav_dict_per_sample(all_filtered_data: pd.DataFrame): 
+    
+    # -----------------------------
+    # 1️⃣ Load pretrained model
+    # -----------------------------
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = torch.load(Path("ResNetWithAttention.pt"), map_location=device, weights_only=False)
+    model.eval()
 
-label_inputs = {
-    label_name: get_emotion_tensor_cremad(
-            root=CREMAD_ROOT,
-            label_name=label_name,
-            max_seconds=MAX_SPECTOGRAM_DURATION_IN_SECONDS,
-            normalization_fn=lambda x: x,
-            n_samples=N_SAMPLES_PER_LABEL,
-    )  # -> [B, 1, H, W]; remove if your mel already has channel dim
-    for label_name in label_emotion_mapping.values()
-}
+    # -----------------------------
+    # 2️⃣ Choose layer for TCAV to work on
+    # -----------------------------
 
-# -----------------------------
-# 1️⃣ Load pretrained model
-# -----------------------------
-model = torch.load(Path("ResNetWithAttention.pt"), map_location=device, weights_only=False)
-model.eval()
+    layer = "module3.blocks.0.conv2"
 
-# -----------------------------
-# 2️⃣ Choose layer for TCAV to work on
-# -----------------------------
-
-layer = "module3.blocks.0.conv2"
-
-# -----------------------------
-# 3️⃣ Compute TCAV
-# -----------------------------
-# Captum TCAV expects a dictionary of concept activations, with positive and negative examples.
+    # -----------------------------
+    # 3️⃣ Compute TCAV
+    # -----------------------------
+    # Captum TCAV expects a dictionary of concept activations, with positive and negative examples.
 
 
-# Define TCAV object
-tcav = TCAV(model, [layer])
-tcav_scores_per_label= {}
+    # Define TCAV object
+    tcav = TCAV(model, [layer])
 
 
-positive_concepts: list[Concept] = [Concept(id=concept_idx, name=concept_name, data_iter=DataLoader(PreGeneratedConceptDataset(n_samples=60, concept_name=concept_name), shuffle=False))
-                               for concept_idx, concept_name in enumerate(concept_unique_names)]
+    positive_concepts: list[Concept] = [Concept(id=concept_idx, name=concept_name, data_iter=DataLoader(PreGeneratedConceptDataset(n_samples=100, concept_name=concept_name), shuffle=False))
+                                for concept_idx, concept_name in enumerate(CONCEPT_UNIQUE_NAMES)]
 
-# This concept is the negative of concepts.
-negative_concept_dataset = PreGeneratedRandomSpectrogramDataset(n_samples=10, freq_count=FREQUENCY_BIN_COUNT, frames=TARGET_FRAMES)
-random_concept = Concept(id=len(positive_concepts), name='random', data_iter=DataLoader(negative_concept_dataset, shuffle=False))
+    # This concept is the negative of concepts.
+    negative_concept_dataset = PreGeneratedRandomSpectrogramDataset(n_samples=100, freq_count=FREQUENCY_BIN_COUNT, frames=TARGET_FRAMES)
+    random_concept = Concept(id=len(positive_concepts), name='random', data_iter=DataLoader(negative_concept_dataset, shuffle=False))
 
-# Debug call, don't uncomment
-# show_arrays_in_separate_windows(negative_concept_dataset.get_data)
+    # Debug call, don't uncomment
+    # show_arrays_in_separate_windows(negative_concept_dataset.get_data)
 
-# -----------------------------
-# 3️⃣b Compute TCAV per-sample
-# -----------------------------
-tcav_scores_per_sample = {}
+    print("Reached tcav interpret")
+    
+    tcav_dict_per_sample = {}
+    
+    # for row(pandas series) in df:
+    for i, row in tqdm(all_filtered_data.iterrows(), total=len(all_filtered_data), desc="Processing samples"):
+        label_name = row['predicted_label']
+        path = row['path']
+        sample = torch.tensor(audio_to_mel_spectrogram(Path(path)), dtype=torch.float32).unsqueeze(0).unsqueeze(0)  # shape [1, 1, H, W]
+        label_index = list(LABEL_EMOTION_MAPPING.keys())[list(LABEL_EMOTION_MAPPING.values()).index(label_name)]
+        tcav_dict_per_sample[path] = {}
+        
+        score_for_label = tcav.interpret(
+                inputs=sample,
+                experimental_sets=[[c, random_concept] for c in positive_concepts],
+                target=label_index
+            )
+        
+        tcav_dict_per_sample[path] = score_for_label
+        
+    
+    return tcav_dict_per_sample
 
-for label_index, label_name in label_emotion_mapping.items():
-    tcav_scores_per_label[label_name] = tcav.interpret(
-        inputs=label_inputs[label_name],
-        experimental_sets=[[c, random_concept] for c in positive_concepts],
-        target=label_index  # integer index of target class
-    )
+EMO_RE = re.compile(r"_(ANG|DIS|FEA|HAP|NEU|SAD)_", re.IGNORECASE)
+
+def parse_cremad_emotion(p: Path):
+    m = EMO_RE.search(p.name.upper())
+    return EMO_CODE_TO_NAME.get(m.group(1).upper()) if m else None
+
+def get_tcav_per_sample():
+    rows = []
+    for wav in CREMAD_ROOT.rglob("*.wav"):
+        emo = parse_cremad_emotion(wav)
+        if emo is None:
+            continue
+        rows.append(
+            {
+                "path": str(wav.resolve()),
+                # filename-based ground truth for convenience
+                "true_label": emo,
+                # keep per-sample loop compatible: provide predicted_label
+                # if you don't have a predictions table, default to true_label
+                "predicted_label": emo,
+                # optional; fill NaN if you don't have it
+                "predicted_probability": np.nan,
+            }
+        )
+
+    if not rows:
+        raise ValueError(f"No CREMA-D .wav files with recognizable emotion codes under {CREMAD_ROOT}")
+
+    df_attributes = pd.DataFrame(rows)
 
 
+    dic = _get_tcav_dict_per_sample(df_attributes)
+    df_tcav = _tcav_dict_per_sample_to_df(dic, CONCEPT_UNIQUE_NAMES)
 
-# Now tcav_scores_per_sample[label_name][i] contains the TCAV results for the i-th sample.
+    # Merge TCAV results with attributes by 'path'
+    df_merged = df_tcav.merge(df_attributes, on='path', how='left')
 
-# -----------------------------
-# 4️⃣ Inspect results
-# -----------------------------
-df_tcav = tcav_scores_to_df(tcav_scores_per_label, concept_unique_names)
-df_tcav.to_csv("crema_d_tcav_results.csv", index=False, encoding="utf-8")
-# for label_name, score_dict in tcav_scores_per_label.items():
-#      print(f"TCAV scores for label {label_name}: {score_dict}")
+    # Reorder columns to match your RAVDESS output shape
+    desired_order = [
+        'path',
+        'true_label',
+        'predicted_label',
+        'predicted_probability',
+        'concept_name',
+        'layer_name',
+        'positive_percentage',
+        'magnitude'
+    ]
+    # Keep only columns that actually exist (predicted_probability may be NaN but present)
+    existing = [c for c in desired_order if c in df_merged.columns]
+    df_merged = df_merged[existing]
 
-# pprint(f"TCAV scores for label {'angry'}: {tcav_scores_per_label['angry']}", depth=1)
+    return df_merged
 
-# df_tcav = tcav_scores_to_df(tcav_scores_per_label, concept_unique_names)
-
-display(df_tcav)
+df_tcav_per_sample = get_tcav_per_sample()
+df_tcav_per_sample.to_csv("crema_d_tcav_results_per_sample.csv", index=False, encoding="utf-8")
