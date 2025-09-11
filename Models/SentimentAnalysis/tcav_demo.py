@@ -5,7 +5,7 @@ from pathlib import Path
 # from captum.attr import LayerActivation
 # from functorch.dim import Tensor #! makes a bug because functorch.dim isn't supported in python 3.12 !!
 from pprint import pprint
-from typing import Optional
+from typing import List, Optional
 
 import numpy as np
 import pandas as pd
@@ -113,6 +113,80 @@ class PreGeneratedConceptDataset(Dataset):
 
 # Functions
 
+def init_tcav_with_pamalia_dict():
+    # -----------------------------
+    # 1️⃣ Load pretrained model
+    # -----------------------------
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = torch.load(Path("ResNetWithAttention.pt"), map_location=device, weights_only=False)
+    model.eval()
+
+    # -----------------------------
+    # 2️⃣ Choose layer for TCAV to work on
+    # -----------------------------
+
+    layer = "module3.blocks.0.conv2"
+
+    # -----------------------------
+    # 3️⃣ Compute TCAV
+    # -----------------------------
+    # Captum TCAV expects a dictionary of concept activations, with positive and negative examples.
+
+
+    # Define TCAV object
+    tcav = TCAV(model, [layer], test_split_ratio=0.33)
+
+
+    positive_concepts: list[Concept] = [Concept(id=concept_idx, name=concept_name, data_iter=DataLoader(PreGeneratedConceptDataset(n_samples=100, concept_name=concept_name), shuffle=False))
+                                for concept_idx, concept_name in enumerate(CONCEPT_UNIQUE_NAMES)]
+
+    # This concept is the negative of concepts.
+    negative_concept_dataset = PreGeneratedRandomSpectrogramDataset(n_samples=100, freq_count=FREQUENCY_BIN_COUNT, frames=TARGET_FRAMES)
+    random_concept = Concept(id=len(positive_concepts), name='random', data_iter=DataLoader(negative_concept_dataset, shuffle=False))
+    
+    return {'tcav': tcav, 'positive_concepts': positive_concepts, 'random_concept': random_concept, 'layer': layer}
+
+
+def _compute_cav_accuracy_df(tcav: TCAV,
+                             positive_concepts: List[Concept],
+                             random_concept: Concept) -> pd.DataFrame:
+    """
+    Trains / loads CAVs once and extracts the linear concept-classifier accuracy
+    per (concept, layer). Returns a DataFrame with columns:
+    [concept_name, layer_name, cav_acc]
+    """
+    # One experimental set per concept: [concept, random]
+    experimental_sets = [[c, random_concept] for c in positive_concepts]
+
+    # Train / load CAVs for all concepts & layers in one shot
+    cavs_dict = tcav.compute_cavs(experimental_sets, force_train=False)
+
+    rows = []
+    # cavs_dict maps "<id>-<id>-..." -> {layer_name: CAV}
+    for concepts_key, layer_map in cavs_dict.items():
+        try:
+            pos_id = int(str(concepts_key).split("-")[0])  # first id is the positive concept id
+        except Exception:
+            continue
+        if not (0 <= pos_id < len(positive_concepts)):
+            continue
+        concept_name = positive_concepts[pos_id].name
+
+        for layer_name, cav_obj in layer_map.items():
+            if cav_obj is None or cav_obj.stats is None:
+                continue
+            acc = cav_obj.stats.get("accs", None)  # DefaultClassifier returns {"accs": <tensor/float>}
+            if isinstance(acc, torch.Tensor):
+                acc = acc.detach().cpu().item()
+            rows.append({
+                "concept_name": concept_name,
+                "layer_name": layer_name,
+                "cav_acc": float(acc) if acc is not None else np.nan,
+            })
+
+    return pd.DataFrame(rows, columns=["concept_name", "layer_name", "cav_acc"])
+
+
 def _tcav_dict_per_sample_to_df(scores_by_sample: dict, concept_names: list[str]) -> pd.DataFrame:
     # """
     # Flatten Captum TCAV results into a DataFrame with:
@@ -151,44 +225,25 @@ def _tcav_dict_per_sample_to_df(scores_by_sample: dict, concept_names: list[str]
                     "positive_percentage": float(sc[0]),
                     "magnitude": float(mg[0]),
                 })
-
-    return pd.DataFrame(rows, columns=[
+    per_sample_df = pd.DataFrame(rows, columns=[
         "path", "concept_name", "layer_name", "positive_percentage", "magnitude"
     ])
+    
+    tcav_dict = init_tcav_with_pamalia_dict()
+    acc_df = _compute_cav_accuracy_df(tcav=tcav_dict['tcav'], positive_concepts=tcav_dict['positive_concepts'], random_concept=tcav_dict['random_concept'])
+    # acc_df has columns: ["concept_name", "layer_name", "cav_acc"]
+    # merge each row of acc_df with every row in per_sample_df that has the same concept_name and layer_name
+    per_sample_acc_df = per_sample_df.merge(acc_df, on=["concept_name", "layer_name"], how="left")
+    return per_sample_acc_df
+
 
 # all_filtered_data is for droping men samples and/or false positive samples 
 def _get_tcav_dict_per_sample(all_filtered_data: pd.DataFrame): 
+    tcav_dict = init_tcav_with_pamalia_dict()
+    tcav = tcav_dict['tcav']
+    positive_concepts = tcav_dict['positive_concepts']
+    random_concept = tcav_dict['random_concept']
     
-    # -----------------------------
-    # 1️⃣ Load pretrained model
-    # -----------------------------
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = torch.load(Path("ResNetWithAttention.pt"), map_location=device, weights_only=False)
-    model.eval()
-
-    # -----------------------------
-    # 2️⃣ Choose layer for TCAV to work on
-    # -----------------------------
-
-    layer = "module3.blocks.0.conv2"
-
-    # -----------------------------
-    # 3️⃣ Compute TCAV
-    # -----------------------------
-    # Captum TCAV expects a dictionary of concept activations, with positive and negative examples.
-
-
-    # Define TCAV object
-    tcav = TCAV(model, [layer])
-
-
-    positive_concepts: list[Concept] = [Concept(id=concept_idx, name=concept_name, data_iter=DataLoader(PreGeneratedConceptDataset(n_samples=100, concept_name=concept_name), shuffle=False))
-                                for concept_idx, concept_name in enumerate(CONCEPT_UNIQUE_NAMES)]
-
-    # This concept is the negative of concepts.
-    negative_concept_dataset = PreGeneratedRandomSpectrogramDataset(n_samples=100, freq_count=FREQUENCY_BIN_COUNT, frames=TARGET_FRAMES)
-    random_concept = Concept(id=len(positive_concepts), name='random', data_iter=DataLoader(negative_concept_dataset, shuffle=False))
-
     # Debug call, don't uncomment
     # show_arrays_in_separate_windows(negative_concept_dataset.get_data)
 
@@ -233,8 +288,14 @@ def get_tcav_per_sample():
     # create a new df, which is df_tcav but added attributes from df_attributes based on the 'path' column
     df_merged = df_tcav.merge(df_attributes, on='path', how='left')
 
-    # rearrange columns in a custom order
-    desired_order = ['path', 'true_label', 'predicted_label', 'predicted_probability', 'concept_name', 'layer_name', 'positive_percentage', 'magnitude']  # Specify the desired order
-    df_merged = df_merged[desired_order]
+    # # rearrange columns in a custom order
+    # desired_order = ['path', 'true_label', 'predicted_label', 'predicted_probability', 'concept_name', 'layer_name', 'positive_percentage', 'magnitude']  # Specify the desired order
+    # df_merged = df_merged[desired_order]
     
     return df_merged
+
+
+if __name__ == "__main__":
+    from tcav_demo import get_tcav_per_sample
+    df_merged = get_tcav_per_sample()
+    df_merged.to_csv("tcav_per_sample_with_acc.csv", index=False)
