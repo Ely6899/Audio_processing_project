@@ -72,7 +72,7 @@ CREMAD_PATTERN = re.compile(
 EMO_RE = re.compile(r"_(ANG|DIS|FEA|HAP|NEU|SAD)_", re.IGNORECASE)
 
 
-class PreGeneratedRandomSpectrogramDataset(Dataset):
+class PreGeneratedRandomSpectrogramDataset_CREMAD(Dataset):
     """
     PyTorch Dataset that pre-generates all random spectrogram in memory.
     """
@@ -180,46 +180,6 @@ def group_by_emotion_cremad(paths: List[Path]) -> Dict[str, List[Path]]:
     # Remove empties to avoid surprises
     return {k: v for k, v in buckets.items() if len(v) > 0}
 
-
-def get_emotion_tensor_cremad(
-    root: Path,
-    label_name: str,
-    max_seconds: float,
-    normalization_fn=lambda x: x,
-    n_samples: int | None = None,
-):
-    # 1. List all matching WAV paths for this label
-    all_paths = list_cremad_files(root, allowed_emotions=ALLOWED_EMOTIONS)
-    by_label = group_by_emotion_cremad(all_paths)
-
-    if label_name not in by_label or len(by_label[label_name]) == 0:
-        raise ValueError(
-            f"No CREMA-D files found for label '{label_name}' under {root}"
-        )
-
-    chosen = by_label[label_name]
-
-    # 2. Optionally sample n files
-    if n_samples is not None and n_samples < len(chosen):
-        chosen = random.sample(chosen, n_samples)  # without replacement
-
-    # 3. Process each file → spectrogram tensor
-    tensors = []
-    for wav_path in chosen:
-        mel = audio_to_mel_spectrogram(
-            file_path=wav_path,
-            max_length_in_seconds=max_seconds,
-            normalization_fn=normalization_fn,
-        ).astype("float32")
-        tensors.append(torch.from_numpy(mel))
-
-    # 4. Stack and adjust shape for CNN input
-    batch = torch.stack(tensors)
-    if batch.dim() == 3:  # (N, H, W)
-        batch = batch.unsqueeze(1)  # → (N, 1, H, W)
-
-    return batch.to(device=device)
-
 def _tcav_dict_per_sample_to_df(scores_by_sample: dict, concept_names: list[str]) -> pd.DataFrame:
     # """
     # Flatten Captum TCAV results into a DataFrame with:
@@ -292,7 +252,7 @@ def _get_tcav_dict_per_sample(all_filtered_data: pd.DataFrame):
                                 for concept_idx, concept_name in enumerate(CONCEPT_UNIQUE_NAMES)]
 
     # This concept is the negative of concepts.
-    negative_concept_dataset = PreGeneratedRandomSpectrogramDataset(n_samples=100, freq_count=FREQUENCY_BIN_COUNT, frames=TARGET_FRAMES)
+    negative_concept_dataset = PreGeneratedRandomSpectrogramDataset_CREMAD(n_samples=100, freq_count=FREQUENCY_BIN_COUNT, frames=TARGET_FRAMES)
     random_concept = Concept(id=len(positive_concepts), name='random', data_iter=DataLoader(negative_concept_dataset, shuffle=False))
 
     # Debug call, don't uncomment
@@ -373,5 +333,7 @@ def get_tcav_per_sample():
 
     return df_merged
 
-df_tcav_per_sample = get_tcav_per_sample()
-df_tcav_per_sample.to_csv("crema_d_tcav_results_per_sample.csv", index=False, encoding="utf-8")
+
+if __name__ == '__main__':
+    df_tcav_per_sample = get_tcav_per_sample()
+    df_tcav_per_sample.to_csv("crema_d_tcav_results_per_sample.csv", index=False, encoding="utf-8")
