@@ -16,17 +16,6 @@ from Visualizations import plot_mel_spectrogram
 
 from PreprocessParams import MAX_SPECTOGRAM_DURATION_IN_SECONDS, TARGET_FRAMES, FREQUENCY_BIN_COUNT, HOP_LENGTH, SAMPLE_RATE
 
-# currently working:
-    # 1.
-    # generate_concept_patch("long"V, "rising"V, "steep"V, "thick"V)
-    # (long_time=0.1, std_dev_time=0.01) , (steep_rising_degree_tone=32, std_dev_rising=7), thick_thickness=3
-    # 2.
-    # generate_concept_patch("short"V, "rising"V, "steep"V, "thin"V)
-    # (short_time=0.05, std_dev_time=0.008) , (steep_rising_degree_tone=32, std_dev_rising=7), thin_thickness=3
-    # 3.
-    # generate_concept_patch("short"V, "rising"V, "steep"V, "thick"V)
-    # (short_time=0.05, std_dev_time=0.008) , (steep_rising_degree_tone=32, std_dev_rising=7), thick_thickness=5
-
 
 # --- Your concept knobs (means + stds) ---
 SHORT_TIME = 0.05   # seconds

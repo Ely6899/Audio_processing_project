@@ -1,5 +1,5 @@
 import os.path
-from typing import Tuple, Optional,Any, Iterable
+from typing import List, Tuple, Optional,Any, Iterable
 
 
 import librosa.display
@@ -81,6 +81,10 @@ def plot_mel_spectrogram(mel_spec, sr=SAMPLE_RATE, hop_length=HOP_LENGTH, block=
     """
     if isinstance(mel_spec, torch.Tensor):
         mel_spec = mel_spec.squeeze().numpy()  # Remove extra dimensions and convert to NumPy
+    
+    # if the first dimension is 3, assume it's channels and the first dim to last dim
+    if mel_spec.ndim == 3 and mel_spec.shape[0] == 3:
+        mel_spec = np.moveaxis(mel_spec, 0, -1)  # CHW -> HWC
 
     plt.figure(figsize=(10, 4))
     librosa.display.specshow(mel_spec, sr=sr, hop_length=hop_length, x_axis='time', y_axis='mel', cmap='inferno', fmax=sr//2)
@@ -218,7 +222,7 @@ def save_mel_spectrogram(
     mel_spec, 
     file_save_path: Path,
     hparams: dict[str, Any] | None = None,
-    keys: Iterable[str] | None = None,
+    keys: List[str] | None = None,
     sr=SAMPLE_RATE, 
     hop_length=HOP_LENGTH
 ):
