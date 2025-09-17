@@ -16,9 +16,15 @@
 # Imports
 import os
 from pathlib import Path
+from pprint import pprint
 from typing import List, Tuple, Dict, Sequence, Optional
 from dataclasses import dataclass
+from xml.parsers.expat import model
 
+from arrow import get
+import pandas as pd
+from regex import D
+from sklearn.model_selection import GroupShuffleSplit
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -39,7 +45,7 @@ from tcav_demo import CONCEPT_UNIQUE_NAMES
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 BATCH_SIZE = 8
 LR = 1e-3
-EPOCHS = 40
+EPOCHS = 25
 NUM_WORKERS = 0 # no multiprocessing
 FREEZE_TO_LAST_BLOCK = True         # freeze all except layer4 + fc (few-shot friendly)
 CALIBRATE_THRESHOLDS = True         # find per-label thresholds on val set
@@ -56,15 +62,36 @@ TAG2IDX = {t: i for i, t in enumerate(ALL_TAGS)}
 NUM_TAGS = len(ALL_TAGS)
 
 # ---------- Your data ----------
-# Provide lists of samples: (image_path, [list_of_present_tags])
-# Example:
-# train_items = [
-#   ("path/to/img1.png", ["long-thick-constant"]),
-#   ("path/to/img2.png", ["long-steep-thick-rising","long-thick-constant"]),
-# ]
-train_items: List[Tuple[str, List[str]]] = [(r"RAVDESS\original_data\Actor_06\03-01-01-01-02-01-06.wav", ["short_constant_thick", "long_constant_thick", "short_dropping_steep_thick"])]  #TODO <-- FILL WITH REAL VALUES!
-val_items:   List[Tuple[str, List[str]]] = [(r'RAVDESS\original_data\Actor_08\03-01-03-01-01-01-08.wav', ["short_dropping_steep_thick", "short_constant_thick"])]  #TODO <-- FILL WITH REAL VALUES!
+def get_train_val_split(file_path: str = 'spectrograms_multi_labels.csv', random_state: int = 42) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+        Load the CSV and split into train/val ensuring no actor overlap.
+        
+        assumes the CSV has columns:
+        - "Path": str path to the spectrogram image
+        - one column per concept in ALL_TAGS with 0/1 values indicating absence/presence
+        
+        Returns:
+        - train_items: pd.DataFrame for training
+        - val_items: pd.DataFrame for validation
+    """
+    all_spectrogram_concept_labeled = pd.read_csv(file_path)
 
+    # train/val split by actor IDs
+
+    # Extract actor ID (the last number in path)
+    all_spectrogram_concept_labeled["actor"] = all_spectrogram_concept_labeled["Path"].str.extract(r"Actor_(\d+)")
+
+    # Define groups
+    groups = all_spectrogram_concept_labeled["actor"]
+
+    # Split (80% train, 20% val) ensuring no actor appears in both
+    gss = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=random_state)
+    train_idx, val_idx = next(gss.split(all_spectrogram_concept_labeled, groups=groups))
+
+    train_items = all_spectrogram_concept_labeled.iloc[train_idx]
+    val_items = all_spectrogram_concept_labeled.iloc[val_idx]
+    
+    return train_items, val_items
 
 
 # ---------- Dataset ----------
@@ -83,16 +110,26 @@ class MultiLabelSpectrogramDataset(Dataset):
       - path: str, the original image path (useful for debugging).
     """
 
-    def __init__(self, items: List[Tuple[str, List[str]]], letterbox: bool = False):
+    def __init__(self, items: pd.DataFrame, letterbox: bool = False):
         """
         Initialize the dataset.
 
         Parameters:
-          - items: List of (path, tags) pairs. Tags must be in ALL_TAGS to be set in the label vector.
+          - items: pd.DataFrame with columns ["Path", "long_constant_thick", ...] where each row is a sample and each column is a concept. ordered by the ALL_TAGS list.
+          0/1 values indicate absence/presence of each concept.
           - letterbox: Placeholder flag for future letterbox handling (not used in current pipeline).
         """
-        self.items = items
+        # Keep only the path and the label columns in the expected order
+        cols = ["Path"] + ALL_TAGS
+        missing = [c for c in cols if c not in items.columns]
+        if missing:
+            raise ValueError(f"Missing expected columns: {missing}")
+        self.items = items[cols].reset_index(drop=True).copy()
         self.letterbox = letterbox
+        
+        #! debug
+        print(f"Dataset initialized with {self.items.shape} shape.")
+        #! debug
 
     def __len__(self):
         """
@@ -114,15 +151,12 @@ class MultiLabelSpectrogramDataset(Dataset):
         Notes:
           - Uses prepare_spectrogram_for_backbone with out_size=(224, 224), to_rgb=True, normalize=True.
         """
-        path, tags = self.items[idx]
+        row = self.items.iloc[idx]
+        path = Path(row["Path"])
 
-        path = Path(path)
-        # build multi-hot vector
-        y = torch.zeros(NUM_TAGS, dtype=torch.float32)
-        for t in tags:
-            if t in TAG2IDX:
-                y[TAG2IDX[t]] = 1.0
-
+        # Select labels strictly by ALL_TAGS and ensure float32
+        y = torch.tensor(row[ALL_TAGS].to_numpy(dtype=np.float32), dtype=torch.float32)
+        
         # load spectrogram image:
         img = audio_to_mel_spectrogram(path)
         img = torch.from_numpy(img)
@@ -136,33 +170,38 @@ class MultiLabelSpectrogramDataset(Dataset):
             normalize=True,
             return_both=True,
         )
-        return model_img, y, str(path)  # keep path for debugging, sending string as path will make dataloader create an error.
+        return model_img, y, str(path)  # keep path for debugging, sending as path will make dataloader create an error.
 
+# ---------- Dummy baseline model: always predict 1 (exists) for every tag ----------
+class DummyAllOnes(nn.Module):
+    """A dummy model that ignores the input and outputs the same large positive logit
+    for every class, so that sigmoid(logit) ~ 1. Works with evaluate()."""
+    def __init__(self, num_tags: int, logit_value: float = 1000.0):
+        super().__init__()
+        self.num_tags = num_tags
+        # register a non-trainable buffer scalar; sigmoid(1000) ~ 1
+        self.register_buffer("logit", torch.tensor(float(logit_value)))
 
-# ---------- DataLoaders ----------
-train_ds = MultiLabelSpectrogramDataset(train_items, letterbox=False)
-val_ds   = MultiLabelSpectrogramDataset(val_items,   letterbox=False)
-train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True,  num_workers=NUM_WORKERS)
-val_loader   = DataLoader(val_ds,   batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS)
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        n = x.shape[0]
+        # broadcast the scalar logit to (n, num_tags)
+        return self.logit.expand(n, self.num_tags)
 
-# ---------- Model ----------
-base = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
-in_dim = base.fc.in_features
-base.fc = nn.Linear(in_dim, NUM_TAGS)
-model = base.to(DEVICE)
+def get_pretrained_model():
+    # ---------- Model ----------
+    base = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
+    in_dim = base.fc.in_features
+    base.fc = nn.Linear(in_dim, NUM_TAGS)
+    model = base.to(DEVICE)
 
-if FREEZE_TO_LAST_BLOCK:
-    for p in model.parameters():
-        p.requires_grad = False
-    for p in model.layer4.parameters():
-        p.requires_grad = True
-    for p in model.fc.parameters():
-        p.requires_grad = True
-
-optimizer = torch.optim.AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=LR, weight_decay=1e-3)
-criterion = nn.BCEWithLogitsLoss()
-scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="max", factor=0.5, patience=3)
-
+    if FREEZE_TO_LAST_BLOCK:
+        for p in model.parameters():
+            p.requires_grad = False
+        for p in model.layer4.parameters():
+            p.requires_grad = True
+        for p in model.fc.parameters():
+            p.requires_grad = True
+    return model
 
 #? ---------- Metrics ----------
 def f1_micro_macro(y_true: torch.Tensor, y_prob: torch.Tensor, thresholds: Optional[torch.Tensor] = None):
@@ -307,50 +346,22 @@ def evaluate(model, loader, criterion):
     targets = torch.cat(all_targets, dim=0)
     probs = torch.sigmoid(logits)
     f1_micro, f1_macro, f1_per_class = f1_micro_macro(targets, probs, thresholds=None)
-    return total_loss / len(loader.dataset), f1_micro, f1_macro, logits, targets
-
-
-# ---------- Fit ----------
-best_val_score = -1.0
-best_thresholds = torch.full((NUM_TAGS,), 0.5)
-
-for epoch in range(1, EPOCHS + 1):
-    train_loss = train_one_epoch(model, train_loader, optimizer, criterion)
-    val_loss, f1_micro, f1_macro, val_logits, val_targets = evaluate(model, val_loader, criterion)
-
-    # optional per-label threshold calibration on validation set
-    if CALIBRATE_THRESHOLDS:
-        best_thresholds = calibrate_thresholds(val_targets, val_logits)
-        val_probs = torch.sigmoid(val_logits)
-        f1_micro_cal, f1_macro_cal, _ = f1_micro_macro(val_targets, val_probs, thresholds=best_thresholds)
-        display_f1 = f1_micro_cal
-        display_macro = f1_macro_cal
-    else:
-        display_f1 = f1_micro
-        display_macro = f1_macro
-
-    print(f"[{epoch:02d}/{EPOCHS}] "
-          f"train_loss={train_loss:.4f}  val_loss={val_loss:.4f}  "
-          f"F1_micro={display_f1:.4f}  F1_macro={display_macro:.4f}")
-
-    # scheduler on micro-F1
-    scheduler.step(display_f1)
-
-    if display_f1 > best_val_score:
-        best_val_score = display_f1
-        torch.save({
-            "model_state": model.state_dict(),
-            "thresholds": best_thresholds.cpu(),
-            "all_tags": ALL_TAGS,
-        }, CKPT_PATH)
-        print(f"  ↪ saved best checkpoint to {CKPT_PATH} (F1_micro={best_val_score:.4f})")
-
-print("Training done.")
-
+    return {
+        "loss": total_loss / len(loader.dataset),
+        "f1_micro": float(f1_micro),
+        "f1_macro": float(f1_macro),
+        "logits": logits,          # (N, C)
+        "targets": targets,        # (N, C)
+        "extra": {
+            "f1_per_class": f1_per_class,  # np.array, optional
+            # add future metrics here without breaking callers
+        }
+    }
 
 # ---------- Inference helper ----------
 @torch.no_grad()
 def predict_paths(paths: List[str], ckpt_path: str = CKPT_PATH, letterbox: bool=False):
+    model = get_pretrained_model()
     ckpt = torch.load(ckpt_path, map_location=DEVICE)
     model.load_state_dict(ckpt["model_state"])
     thresholds = ckpt.get("thresholds", torch.full((NUM_TAGS,), 0.5)).to(DEVICE)
@@ -372,34 +383,77 @@ def predict_paths(paths: List[str], ckpt_path: str = CKPT_PATH, letterbox: bool=
     return preds
 
 
+def train_evaluate_save():
+    train_items, val_items = get_train_val_split(file_path='spectrograms_multi_labels.csv', random_state=42)
+    
+    print(f"Train items shape: {train_items.shape}, Val items shape: {val_items.shape}")
+    
+    # ---------- DataLoaders ----------
+    train_ds = MultiLabelSpectrogramDataset(train_items, letterbox=False)
+    val_ds   = MultiLabelSpectrogramDataset(val_items,   letterbox=False)
+    train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True,  num_workers=NUM_WORKERS)
+    val_loader   = DataLoader(val_ds,   batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS)
+    
+    model = get_pretrained_model()
+    
+    optimizer = torch.optim.AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=LR, weight_decay=1e-3)
+    criterion = nn.BCEWithLogitsLoss()
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="max", factor=0.5, patience=3)
+
+    # ---------- Fit ----------
+    best_val_score = -1.0
+    best_thresholds = torch.full((NUM_TAGS,), 0.5)
+
+    display_f1_per_class = None
+    
+    for epoch in range(1, EPOCHS + 1):
+        train_loss = train_one_epoch(model, train_loader, optimizer, criterion)
+        out_dict = evaluate(model, val_loader, criterion)
+        val_loss, f1_micro, f1_macro, val_logits, val_targets, f1_per_class = out_dict['loss'], out_dict['f1_micro'], out_dict['f1_macro'], out_dict['logits'], out_dict['targets'], out_dict['extra']['f1_per_class']
+        # optional per-label threshold calibration on validation set
+        if CALIBRATE_THRESHOLDS:
+            best_thresholds = calibrate_thresholds(val_targets, val_logits)
+            val_probs = torch.sigmoid(val_logits)
+            f1_micro_cal, f1_macro_cal, f1_per_class_cal = f1_micro_macro(val_targets, val_probs, thresholds=best_thresholds)
+            display_f1 = f1_micro_cal
+            display_macro = f1_macro_cal
+            display_f1_per_class = f1_per_class_cal
+        else:
+            display_f1 = f1_micro
+            display_macro = f1_macro
+            display_f1_per_class = f1_per_class
+
+        print(f"[{epoch:02d}/{EPOCHS}] "
+            f"train_loss={train_loss:.4f}  val_loss={val_loss:.4f}  "
+            f"F1_micro={display_f1:.4f}  F1_macro={display_macro:.4f}  ")
+        
+
+        # scheduler on micro-F1
+        scheduler.step(display_f1)
+
+        if display_f1 > best_val_score:
+            best_val_score = display_f1
+            torch.save({
+                "model_state": model.state_dict(),
+                "thresholds": best_thresholds.cpu(),
+                "all_tags": ALL_TAGS,
+            }, CKPT_PATH)
+            print(f"  ↪ saved best checkpoint to {CKPT_PATH} (F1_micro={best_val_score:.4f})")
+    print(f'best f1 per class: {display_f1_per_class}')
+    print("Training done.") 
+
+
 if __name__ == "__main__":
-  
-  #? assert dataset works
+    # model = DummyAllOnes(NUM_TAGS).to(DEVICE)
 
-  your_items_list = [("RAVDESS/original_data/Actor_06/03-01-01-01-01-01-06.wav", ["long_constant_thick"])]
-
-  dataset = MultiLabelSpectrogramDataset(items=your_items_list)
-
-  assert dataset[0][0].shape == (3, 224, 224)
-
-  #? assert train step and an eval works
-  print("Sanity check: running one train step and one eval pass...")
-  try:
-      train_loss = train_one_epoch(model, train_loader, optimizer, criterion)
-      print(f"[sanity] train_loss={train_loss:.4f}")
-
-      val_loss, f1_micro, f1_macro, _, _ = evaluate(model, val_loader, criterion)
-      print(f"[sanity] val_loss={val_loss:.4f} | f1_micro={f1_micro:.3f} | f1_macro={f1_macro:.3f}")
-
-      # Optional: step LR scheduler with the validation metric
-      try:
-          scheduler.step(f1_micro)
-      except Exception:
-          pass
-  except Exception as e:
-      print(f"[sanity] Skipped (dataset/files may be missing): {e}")  
-      
-  
-  #? assert predict_paths works
-  preds = predict_paths(["RAVDESS/original_data/Actor_06/03-01-01-01-01-01-06.wav", "RAVDESS/original_data/Actor_08/03-01-03-01-01-01-08.wav"])
-  print("hi")
+    # train_items, val_items = get_train_val_split()
+    # train_ds = MultiLabelSpectrogramDataset(train_items, letterbox=False)
+    # val_ds   = MultiLabelSpectrogramDataset(val_items,   letterbox=False)
+    # train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True,  num_workers=NUM_WORKERS)
+    # val_loader   = DataLoader(val_ds,   batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS)
+    
+    # pprint(evaluate(model, val_loader, nn.BCEWithLogitsLoss()))
+    
+    train_evaluate_save()
+    
+    # pprint(predict_paths([r'RAVDESS\original_data\Actor_04\03-01-07-01-02-01-04.wav']))
