@@ -17,7 +17,7 @@
 import os
 from pathlib import Path
 from pprint import pprint
-from typing import List, Tuple, Dict, Sequence, Optional
+from typing import Any, List, Tuple, Dict, Sequence, Optional
 from dataclasses import dataclass
 from xml.parsers.expat import model
 
@@ -204,12 +204,14 @@ def get_pretrained_model():
     return model
 
 #? ---------- Metrics ----------
-def f1_micro_macro(y_true: torch.Tensor, y_prob: torch.Tensor, thresholds: Optional[torch.Tensor] = None):
+def get_eval_metric_dict(y_true: torch.Tensor, y_prob: torch.Tensor, thresholds: Optional[torch.Tensor] = None) -> Dict[str, Any]:
     """
     y_true: (N, C) float {0,1}
     y_prob: (N, C) sigmoid probabilities
     thresholds: (C,) per-label thresholds in [0,1] or None->0.5
     """
+    metric_dict = {"per class": None, "global": None}
+    
     eps = 1e-9
     if thresholds is None:
         thresholds = torch.full((y_true.shape[1],), 0.5, device=y_prob.device)
@@ -220,13 +222,19 @@ def f1_micro_macro(y_true: torch.Tensor, y_prob: torch.Tensor, thresholds: Optio
     fp = (y_pred * (1 - y_true)).sum(dim=0)
     fn = ((1 - y_pred) * y_true).sum(dim=0)
 
+    metric_dict["per class"] = {"true positive": tp, "false positive": fp, "false negative": fn}
+    
     precision_c = tp / (tp + fp + eps)
     recall_c    = tp / (tp + fn + eps)
     f1_c        = 2 * precision_c * recall_c / (precision_c + recall_c + eps)
-
+    
+    metric_dict["per class"].update({"precision": precision_c, "recall": recall_c, "f1": f1_c})
+    
     # macro
     f1_macro = f1_c.mean().item()
-
+    
+    metric_dict["global"] = {"f1_macro": f1_macro}
+    
     # micro (sum over classes first)
     TP = tp.sum()
     FP = fp.sum()
@@ -235,6 +243,15 @@ def f1_micro_macro(y_true: torch.Tensor, y_prob: torch.Tensor, thresholds: Optio
     recall_micro    = TP / (TP + FN + eps)
     f1_micro = (2 * precision_micro * recall_micro / (precision_micro + recall_micro + eps)).item()
 
+    metric_dict["global"].update({"true positive micro": TP, "false positive micro": FP, "false negative micro": FN, "precision micro": precision_micro, "recall micro": recall_micro, "f1_micro": f1_micro})
+
+    return metric_dict
+
+def f1_micro_macro(y_true: torch.Tensor, y_prob: torch.Tensor, thresholds: Optional[torch.Tensor] = None):
+    metrics = get_eval_metric_dict(y_true, y_prob, thresholds)
+    f1_micro = metrics["global"]["f1_micro"]
+    f1_macro = metrics["global"]["f1_macro"]
+    f1_c = metrics["per class"]["f1"]
     return f1_micro, f1_macro, f1_c.detach().cpu().numpy()
 
 def calibrate_thresholds(y_true: torch.Tensor, y_logit: torch.Tensor) -> torch.Tensor:
@@ -304,7 +321,7 @@ def train_one_epoch(model, loader, optimizer, criterion):
     return running_loss / len(loader.dataset)
 
 @torch.no_grad()
-def evaluate(model, loader, criterion):
+def evaluate_multi_label(model, loader, criterion):
     """
     Evaluate the model on a validation/test split without gradient tracking.
 
@@ -345,7 +362,8 @@ def evaluate(model, loader, criterion):
     logits = torch.cat(all_logits, dim=0)
     targets = torch.cat(all_targets, dim=0)
     probs = torch.sigmoid(logits)
-    f1_micro, f1_macro, f1_per_class = f1_micro_macro(targets, probs, thresholds=None)
+    metrics_dict = get_eval_metric_dict(targets, probs, thresholds=None)
+    f1_micro, f1_macro, f1_per_class = metrics_dict["global"]["f1_micro"], metrics_dict["global"]["f1_macro"], metrics_dict["per class"]["f1"].detach().cpu().numpy()
     return {
         "loss": total_loss / len(loader.dataset),
         "f1_micro": float(f1_micro),
@@ -354,7 +372,8 @@ def evaluate(model, loader, criterion):
         "targets": targets,        # (N, C)
         "extra": {
             "f1_per_class": f1_per_class,  # np.array, optional
-            # add future metrics here without breaking callers
+            "precition_per_class": metrics_dict["per class"]["precision"].detach().cpu().numpy(),
+            "recall_per_class": metrics_dict["per class"]["recall"].detach().cpu().numpy()
         }
     }
 
@@ -405,11 +424,11 @@ def train_evaluate_save():
     best_thresholds = torch.full((NUM_TAGS,), 0.5)
 
     display_f1_per_class = None
-    
+    best_metrics_dict = {}
     for epoch in range(1, EPOCHS + 1):
         train_loss = train_one_epoch(model, train_loader, optimizer, criterion)
-        out_dict = evaluate(model, val_loader, criterion)
-        val_loss, f1_micro, f1_macro, val_logits, val_targets, f1_per_class = out_dict['loss'], out_dict['f1_micro'], out_dict['f1_macro'], out_dict['logits'], out_dict['targets'], out_dict['extra']['f1_per_class']
+        metrics_dict = evaluate_multi_label(model, val_loader, criterion)
+        val_loss, f1_micro, f1_macro, val_logits, val_targets, f1_per_class = metrics_dict['loss'], metrics_dict['f1_micro'], metrics_dict['f1_macro'], metrics_dict['logits'], metrics_dict['targets'], metrics_dict['extra']['f1_per_class']
         # optional per-label threshold calibration on validation set
         if CALIBRATE_THRESHOLDS:
             best_thresholds = calibrate_thresholds(val_targets, val_logits)
@@ -433,13 +452,15 @@ def train_evaluate_save():
 
         if display_f1 > best_val_score:
             best_val_score = display_f1
+            best_metrics_dict = metrics_dict
             torch.save({
                 "model_state": model.state_dict(),
                 "thresholds": best_thresholds.cpu(),
                 "all_tags": ALL_TAGS,
             }, CKPT_PATH)
             print(f"  ↪ saved best checkpoint to {CKPT_PATH} (F1_micro={best_val_score:.4f})")
-    print(f'best f1 per class: {display_f1_per_class}')
+    print('best metrics: ')
+    print(best_metrics_dict)
     print("Training done.") 
 
 
