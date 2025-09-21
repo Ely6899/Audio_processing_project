@@ -21,3 +21,6 @@ class RavdessPaths(EnumType):
 class CremaPaths(EnumType):
     ALL_AUDIO_DATA = Path(os.path.join("CREMA-D"))
     WAV_DATA = Path(os.path.join(ALL_AUDIO_DATA, 'AudioWAV'))
+    
+class TessPaths(EnumType):
+    ALL_DATA = Path(os.path.join("TESS"))

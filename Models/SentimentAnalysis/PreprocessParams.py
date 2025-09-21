@@ -1,3 +1,5 @@
+from enum import EnumType
+
 FREQUENCY_BIN_COUNT = 64
 SAMPLE_RATE = 16000
 
@@ -15,3 +17,13 @@ TARGET_FRAMES = (MAX_SAMPLES - WINDOW_LENGTH) // HOP_LENGTH + 1 # noam: this is 
 TOP_DB = 20
 
 # print(TARGET_FRAMES) # debug
+
+class LABEL_STRINGS(EnumType):
+    ANGRY = "angry"
+    HAPPY = "happy"
+    SAD = "sad"
+    NEUTRAL = "neutral"
+    FEARFUL = "fearful"
+    DISGUSTED = "disgusted"
+    SURPRISED = "surprised"
+    CALM = "calm"

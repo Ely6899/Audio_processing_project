@@ -1,7 +1,7 @@
 import re
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, AnyStr
+from typing import Any, AnyStr, Iterable
 from typing import Tuple
 from collections import Counter
 
@@ -10,8 +10,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from torch.utils.data import Dataset
 
-from ConstPaths import RavdessPaths, CremaPaths
-from PreprocessParams import MAX_SPECTOGRAM_DURATION_IN_SECONDS
+from ConstPaths import RavdessPaths, CremaPaths, TessPaths
+from PreprocessParams import MAX_SPECTOGRAM_DURATION_IN_SECONDS, LABEL_STRINGS
 from Preprocess import audio_to_mel_spectrogram
 
 
@@ -19,12 +19,15 @@ class AudioRawData(ABC):
     """
     Wrapper abstract class to handle Dataset saving in run-time.
     """
-    def __init__(self, data_root: Path, supported_formats: set[str], file_pattern: AnyStr):
+    def __init__(self, data_root: Path, supported_formats: set[str], file_pattern: AnyStr = r".*"):
         self._data_root: Path = data_root
         self._supported_formats: set[str] = supported_formats
         self._data: set[Tuple[Path, Any]] = self._scan_supported_files(file_pattern=file_pattern) # File/s path/s, Label.  used as (Path, str) and (Dict[Path, Path], str).
 
-        self._file_paths, self._file_labels = zip(*list(self._data))
+        try:
+            self._file_paths, self._file_labels = zip(*list(self._data))
+        except ValueError:
+            raise ValueError(f"Error: No data found in {data_root} with the given supported formats and file pattern.")
 
     def _scan_supported_files(self, file_pattern: AnyStr) -> set[Tuple[Path, Any]]:
         base_name_pattern = re.compile(file_pattern)
@@ -40,7 +43,7 @@ class AudioRawData(ABC):
         return result
 
     @abstractmethod
-    def emotion_indexer(self, file_name: Path) -> str:
+    def emotion_indexer(self, file_path: Path) -> str:
         pass
 
     @property
@@ -58,36 +61,35 @@ class RavdessRawData(AudioRawData):
         self._include_aug = include_aug
         super().__init__(RavdessPaths.AUDIO_ORIGINAL_DATA, {".wav"}, r"^\d{2}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}$")
 
-    def emotion_indexer(self, file_name: Path) -> str:
+    def emotion_indexer(self, file_path: Path) -> str:
         """
         For RAVDESS, label is indicated in the third number in the name. This function handles mapping it to a
         readable label.
         @param filename: File path from RAVDESS dataset.
         @return: Label of the file according to the index.
         """
-        numbers = re.findall(r'\d+', file_name.name.__str__())
+        numbers = re.findall(r'\d+', file_path.name.__str__())
 
         index_emotion_mapping = {
-            '01': 'neutral',
-            '02': 'neutral' if not self._include_calm else 'calm',
-            '03': 'happy',
-            '04': 'sad',
-            '05': 'angry',
-            '06': 'fearful',
-            '07': 'disgust',
-            '08': 'surprised'
+            '01': LABEL_STRINGS.NEUTRAL,
+            '02': LABEL_STRINGS.NEUTRAL if not self._include_calm else LABEL_STRINGS.CALM,
+            '03': LABEL_STRINGS.HAPPY,
+            '04': LABEL_STRINGS.SAD,
+            '05': LABEL_STRINGS.ANGRY,
+            '06': LABEL_STRINGS.FEARFUL,
+            '07': LABEL_STRINGS.DISGUSTED,
+            '08': LABEL_STRINGS.SURPRISED
         }
 
         emotion_index = numbers[2]
         emotion = index_emotion_mapping[emotion_index]
         return emotion
 
-
 class CREMARawData(AudioRawData):
     def __init__(self):
         super().__init__(CremaPaths.WAV_DATA, {".wav"}, r"^\d{4}_[A-Z]{3}_[A-Z]{3}_[A-Z]{2}$")
 
-    def emotion_indexer(self, file_name: Path) -> str:
+    def emotion_indexer(self, file_path: Path) -> str:
         """
         The sentences were presented using different emotion (in parentheses is the three-letter code used in the third part of the filename):
 
@@ -102,33 +104,57 @@ class CREMARawData(AudioRawData):
         :return: String of emotion indexing.
         """
         index_emotion_mapping = {
-            'ANG': 'angry',
-            'DIS': 'disgust',
-            'FEA': 'fearful',
-            'HAP': 'happy',
-            'NEU': 'neutral',
-            'SAD': 'sad'
+            'ANG': LABEL_STRINGS.ANGRY,
+            'DIS': LABEL_STRINGS.DISGUSTED,
+            'FEA': LABEL_STRINGS.FEARFUL,
+            'HAP': LABEL_STRINGS.HAPPY,
+            'NEU': LABEL_STRINGS.NEUTRAL,
+            'SAD': LABEL_STRINGS.SAD
         }
 
         pattern = re.compile(r'^\d{4}_[A-Z]{3}_([A-Z]{3})_[A-Z]{2}\.wav$', re.IGNORECASE)
-        match = pattern.match(file_name.name)
+        match = pattern.match(file_path.name)
 
         if not match:
-            raise ValueError(f"Filename format not recognized: {file_name}")
+            raise ValueError(f"Filename format not recognized: {file_path}")
 
         emotion_code = match.group(1).upper()
         emotion = index_emotion_mapping.get(emotion_code)
 
         if emotion is None:
-            raise ValueError(f"Unknown emotion code '{emotion_code}' in file: {file_name}")
+            raise ValueError(f"Unknown emotion code '{emotion_code}' in file: {file_path}")
 
         return emotion
 
+class TESSRawData(AudioRawData):
+    def __init__(self):
+        super().__init__(TessPaths.ALL_DATA, {".wav"})
+    
+    def emotion_indexer(self, file_path: Path) -> str:
+        
+        file_emotion_mapping = {
+            'angry': LABEL_STRINGS.ANGRY,
+            'disgust': LABEL_STRINGS.DISGUSTED,
+            'fear': LABEL_STRINGS.FEARFUL,
+            'happy': LABEL_STRINGS.HAPPY,
+            'neutral': LABEL_STRINGS.NEUTRAL,
+            'ps': LABEL_STRINGS.SURPRISED,  # 'ps' stands for 'pleasant surprised'
+            'sad': LABEL_STRINGS.SAD
+        }
+        
+        # Try to find a known emotion token in the filename stem (robust to different naming conventions)
+        stem = file_path.stem
+        parts = stem.split('_')
+        emotion_index = 2
+        emotion_ds_id = parts[emotion_index]
+        return file_emotion_mapping[emotion_ds_id]
+
+
 class AllRawData:
-    def __init__(self, raw_datasets: tuple[AudioRawData, ...]):
+    def __init__(self, raw_datasets: tuple[AudioRawData, ...], val_ratio: float = 0.3):
         sets_of_data = (raw_dataset.all_data for raw_dataset in raw_datasets)
         self._all_raw_data = set().union(*sets_of_data)
-        self._train_data, self._val_data = None, None
+        self._train_data, self._val_data = self.train_val_test_split(val_ratio=val_ratio)
 
     def train_val_test_split(self, val_ratio: float = 0.3):
         self._train_data, self._val_data = train_test_split(list(self._all_raw_data), test_size=val_ratio, stratify=[label for _, label in self._all_raw_data], random_state=42)
@@ -159,7 +185,7 @@ class AllRawData:
 
 
 class EmotionSpecDataset(Dataset):
-    def __init__(self, file_paths: set, max_length_in_seconds: float = MAX_SPECTOGRAM_DURATION_IN_SECONDS):
+    def __init__(self, file_paths: Iterable, max_length_in_seconds: float = MAX_SPECTOGRAM_DURATION_IN_SECONDS):
         self._data = list(file_paths)
         self._paths , self._labels = zip(*self._data)
 
@@ -585,4 +611,4 @@ class EmotionSpecDataset2d(Dataset):
 #         emotion_index = numbers[2]
 #         emotion = index_emotion_mapping[emotion_index]
 #         return emotion
-    
+
