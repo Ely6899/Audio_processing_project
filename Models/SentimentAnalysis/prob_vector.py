@@ -1,13 +1,17 @@
 
+from typing import Any, Callable, Dict, Optional
+import numpy as np
 import pandas as pd
 from sklearn.calibration import LabelEncoder
 import torch
 import tqdm
-from PreprocessParams import MAX_SPECTOGRAM_DURATION_IN_SECONDS
+from PreprocessParams import LABEL_STRINGS, MAX_SPECTOGRAM_DURATION_IN_SECONDS
 from Preprocess import audio_to_mel_spectrogram
 from audio_dataset import AllRawData, EmotionSpecDataset, RavdessRawData
 from models import ResNetWithAttention
 from pprint import pprint
+import torch.nn as nn
+from torch.utils.data import DataLoader
 
 def get_sample_probabilities_of_model(model, mel_spec_tensor):
     """
@@ -34,26 +38,10 @@ def get_sample_probabilities_of_model(model, mel_spec_tensor):
     probabilities = probabilities.squeeze(0)  # Remove batch dimension if present
     return probabilities.cpu().numpy()
 
-def get_dataset_probabilities_of_model(model, dataset):
-    """
-    Get the probabilities from the model for the given dataset.
-    returns a dataframe with probabilities for each sample in the dataset.
-    """
-    all_probabilities = []
-    for sample in tqdm.tqdm(dataset, desc="Processing samples", unit="sample"):
-        # Get the probabilities for each sample
-        all_probabilities.append(get_sample_probabilities_of_model(model, sample))
-    
-    # Convert probabilities to a DataFrame
-    probabilities_df = pd.DataFrame(all_probabilities, columns=[f"Class_{i}" for i in range(all_probabilities[0].shape[0])])
-    
-    # Add predicted class (class with highest probability)
-    probabilities_df['predicted_class'] = probabilities_df.iloc[:, :all_probabilities[0].shape[0]].idxmax(axis=1)
-    probabilities_df['predicted_class'] = probabilities_df['predicted_class'].str.replace('Class_', '').astype(int)
-    
-    # Add predicted probability value (maximum probability)
-    probabilities_df['predicted_probability'] = probabilities_df.iloc[:, :all_probabilities[0].shape[0]].max(axis=1)
-    return probabilities_df
+def get_sample_result_of_model(model, mel_spec_tensor):
+    probabilities = get_sample_probabilities_of_model(model, mel_spec_tensor)
+    predicted_class = probabilities.argmax()
+    return predicted_class
 
 def preproccess_like_in_dataloader(file_path):
     # noam: audio_to_mel_spectrogram returns shape (freq_bins, time_frames)
@@ -197,7 +185,7 @@ def tests1():
     ds_subset = torch.utils.data.Subset(val_ds, range(subset_size))
 
     print(f"Computing probabilities for {subset_size} samples instead of {len(val_ds)} total samples")
-    probabilities_df = get_dataset_probabilities_of_model(model, ds_subset)
+    #// probabilities_df = get_dataset_probabilities_of_model(model, ds_subset)
     # print(f"True label: {label}")
     # print(f"Predicted class: {predicted_class}")
     print(f"Probabilities: {probabilities_df}")
@@ -207,25 +195,190 @@ def tests1():
     probabilities_df.to_csv(filepath, index=False)
     print(f"Saved probabilities to {filepath}")
 
-if __name__ == "__main__":
-    ######### Probability Vector Dataframe #########
+def predict(classification_model: nn.Module, dataset: torch.utils.data.Dataset):
+    """
+    Predict the classes for all samples in the dataset using the provided classification model.
+    """
+    # Put model in evaluation mode
+    classification_model.eval()
 
-    # raw data loading:
-    ravdess_raw_data = RavdessRawData(include_calm=True, include_aug=False)
+    # Create DataLoader
+    dataloader = DataLoader(dataset, batch_size=32, shuffle=False) # shuffle=False means the order of samples is preserved
 
-    ravdess_raw_data.print_all_label_counts()
+    # Device handling
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    classification_model.to(device)
 
-    all_raw_data = AllRawData((ravdess_raw_data, ))
+    all_preds = []
+    all_probs = []
+
+    with torch.no_grad():
+        for batch in dataloader:
+            # Handle case: dataset returns only input or (input, label)
+            if isinstance(batch, (list, tuple)) and len(batch) == 2:
+                inputs, _ = batch
+            else:
+                inputs = batch
+
+            inputs = inputs.to(device)
+
+            logits = classification_model(inputs)
+            probs = torch.softmax(logits, dim=1)
+            preds = torch.argmax(probs, dim=1)
+
+            all_preds.append(preds.cpu())
+            #all_probs.append(probs.cpu())
+
+    all_preds = torch.cat(all_preds, dim=0)
+    #all_probs = torch.cat(all_probs, dim=0)
+
+    return all_preds #, all_probs
+
+def evaluate_single_label(
+    model: nn.Module,
+    data: torch.utils.data.Dataset,
+    loss_fn: Optional[nn.Module] = None,
+    device: Optional[torch.device] = None,
+    metrics: Optional[Dict[str, Callable[[np.ndarray, np.ndarray, np.ndarray, np.ndarray], Any]]] = None,
+) -> Dict[str, Any]:
+    """
+    Single-label evaluator.
+    - Only accepts a Dataset (preserves original order; no shuffling).
+    - No built-in metrics are computed. Anything you want (accuracy, F1, confusion, top-k, etc.)
+      should be supplied via `metrics` as callables.
+
+    metrics API:
+        fn(y_true, y_pred, y_prob, logits) -> Any
+        where:
+            y_true:  (N,) int32/64
+            y_pred:  (N,) int32/64
+            y_prob:  (N, C) float32 (softmax probs)
+            logits:  (N, C) float32 (raw)
+    Returns:
+        {
+          "avg_loss": float,
+          "num_samples": int,
+          "custom": {name: result, ...}  # only if metrics provided
+        }
+    """
+    if device is None:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if loss_fn is None:
+        loss_fn = nn.CrossEntropyLoss()
+
+    # Build a deterministic DataLoader internally (no batch_size/topk exposed)
+    loader = DataLoader(data, batch_size=64, shuffle=False)
+
+    model.eval()
+    model.to(device)
+
+    total_loss = 0.0
+    n_samples = 0
+
+    all_true: list[np.ndarray] = []
+    all_pred: list[np.ndarray] = []
+    all_logits: list[np.ndarray] = []
+    all_probs: list[np.ndarray] = []
+
+    with torch.no_grad():
+        for batch in loader:
+            if not isinstance(batch, (tuple, list)) or len(batch) < 2:
+                raise ValueError("Dataset must yield (x, y).")
+            x, y = batch[0], batch[1]
+
+            x = x.to(device, non_blocking=True)
+            y = y.to(device, non_blocking=True).long()
+
+            logits = model(x)                   # (B, C)
+            loss = loss_fn(logits, y)           # scalar
+
+            num_classes = logits.size(1)  # C
+            if (y >= num_classes).any():
+                raise ValueError(
+                    f"Found label(s) outside range [0, {num_classes-1}]. "
+                    f"Max label={y.max().item()}, num_classes={num_classes}"
+                )
+            
+            probs = torch.softmax(logits, dim=1)
+            pred = logits.argmax(dim=1)
+
+            bsz = x.size(0)
+            total_loss += float(loss.item()) * bsz
+            n_samples += bsz
+
+            all_true.append(y.detach().cpu().numpy())
+            all_pred.append(pred.detach().cpu().numpy())
+            all_logits.append(logits.detach().cpu().numpy())
+            all_probs.append(probs.detach().cpu().numpy())
+
+    if n_samples == 0:
+        return {"avg_loss": float("nan"), "num_samples": 0}
+
+    y_true = np.concatenate(all_true, axis=0)
+    y_pred = np.concatenate(all_pred, axis=0)
+    logits_np = np.concatenate(all_logits, axis=0)
+    probs_np = np.concatenate(all_probs, axis=0)
+
+    out = {
+        "avg_loss": total_loss / max(n_samples, 1),
+        "num_samples": n_samples,
+    }
+
+    if metrics:
+        custom = {}
+        for name, fn in metrics.items():
+            try:
+                custom[name] = fn(y_true, y_pred, probs_np, logits_np)
+            except Exception as e:
+                custom[name] = {"error": str(e)}
+        out["custom"] = custom
+
+    return out
+
+def test2():
+    raw_data = RavdessRawData(include_calm=True, include_aug=False)
     
-    data = set(list(all_raw_data.all_data)[:100])
+    all_data = AllRawData((raw_data, ), val_ratio=0.3)
+
+    all_data = list(all_data.all_data) # must turn to list before passing to dataset to have same order of samples and predictions
     
-    # create the model:
+    dataset = EmotionSpecDataset(all_data)
+
     model = ResNetWithAttention(num_classes=8)
-
+    
     # Load the model weights
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = torch.load("Eli ResNetWithAttention.pt", map_location=device)
+    # Load state dict first (always map to device at this point)
+    model = torch.load("ResNetWithAttention.pt", map_location=device)
+    model.to(device)
+
+    # Get predictions
+    preds = predict(model, dataset)
+    print(all_data[:4])  # Print first 4 samples to verify alignment
+    print(preds[:4])  # Print first 4 predictions
     
-    # Get the attributes for the sample
-    attributes = get_raw_dataset_attributes(model, data)
-    pprint(attributes[:4])
+if __name__ == "__main__":
+    # ######### Probability Vector Dataframe #########
+
+    # # raw data loading:
+    # ravdess_raw_data = RavdessRawData(include_calm=True, include_aug=False)
+
+    # ravdess_raw_data.print_all_label_counts()
+
+    # all_raw_data = AllRawData((ravdess_raw_data, ))
+    
+    # data = set(list(all_raw_data.all_data)[:100])
+    
+    # # create the model:
+    # model = ResNetWithAttention(num_classes=8)
+
+    # # Load the model weights
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # model = torch.load("Eli ResNetWithAttention.pt", map_location=device)
+    
+    # # Get the attributes for the sample
+    # attributes = get_raw_dataset_attributes(model, data)
+    # pprint(attributes[:4])
+    
+    test2()
+    
