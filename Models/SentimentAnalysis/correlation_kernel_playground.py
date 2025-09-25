@@ -18,11 +18,6 @@ def wave_kernel(freq_bins=20, time_bins=40) -> np.ndarray:
 
     return kernel
 
-# correlation_kernel_calm = np.array([
-#     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-#     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-#     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-# ], dtype=float)
 
 kernel_list = dict({
     'calm': np.array([
@@ -96,10 +91,10 @@ kernel_list = {emotion: normalize_sum(kernel) for emotion, kernel in kernel_list
 # kernel /= np.linalg.norm(kernel) + 1e-12
 #
 # # Visualize
-# plt.figure(figsize=(6,4))
-# plt.imshow(K_vert_5x3, aspect='auto', origin='lower', cmap='RdBu_r')
-# plt.colorbar(label='Amplitude')
-# plt.title("Smooth Flat-Frequency Kernel (40x20)")
-# plt.xlabel("Time bins")
-# plt.ylabel("Frequency bins")
-# plt.show()
+plt.figure(figsize=(6,4))
+plt.imshow(kernel_list['surprised'], aspect='auto', origin='lower', cmap='RdBu_r')
+plt.colorbar(label='Amplitude')
+plt.title("Smooth Flat-Frequency Kernel (40x20)")
+plt.xlabel("Time bins")
+plt.ylabel("Frequency bins")
+plt.show()
