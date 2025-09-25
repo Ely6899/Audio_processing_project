@@ -12,26 +12,10 @@ def train_1channel():
 
     train_set, val_set, test_set = all_data.train_val_test_split(0.1, 0.2)
 
-    # print(len(all_data.all_data))
-    # print(len(train_set))
-    # print(len(val_set))
-    #
-    # print(all_data.print_all_label_counts())
-
-
-    # pprint(ravdess_raw_data.all_data)
-
     # create the dataset with the preprocessing logic:
     train_ds = EmotionSpecDataset(train_set)
     val_ds = EmotionSpecDataset(val_set)
     test_ds = EmotionSpecDataset(test_set)
-
-    # print(train.class_counts)
-    # print(val.class_counts)
-
-    #For testing pre-processing spectrogram
-    # mel_spectrogram = audio_to_mel_spectrogram(Path("RAVDESS/Actor_01/03-01-02-02-02-02-01.wav"), normalization_fn=standardization)
-    # plot_mel_spectrogram(mel_spectrogram, SAMPLE_RATE)
 
 
     # # create the model:
@@ -60,34 +44,40 @@ def train_1channel():
 
 def train_2channel():
     ravdess_raw_data = RavdessRawDataWithNeutral()
-    #pprint(ravdess_raw_data.all_data)
+    all_data = AllRawData(tuple([ravdess_raw_data]))
+
+    train, val, test = all_data.train_val_test_split(0.1, 0.2)
 
     # # create the dataset with the preprocessing logic:
-    train = EmotionSpecDataset2d(ravdess_raw_data.train_data)
-    val = EmotionSpecDataset2d(ravdess_raw_data.val_data)
-
-    #print(train.__getitem__(2)[0].shape)
+    train_ds = EmotionSpecDataset2d(train)
+    val_ds = EmotionSpecDataset2d(val)
+    test_ds = EmotionSpecDataset2d(test)
 
     # create the model:
-    model_paper = ResNetWithAttention2d()
-    model_name = model_paper.__class__.__name__
+    model_paper_2d = ResNetWithAttention2d()
 
     # create the handler:
-    handler_paper = SentimentModelHandler(model_paper, train, val, batch_size=32, learning_rate=0.001)
+    handler_2d = SentimentModelHandler(model_paper_2d,
+                                          train_ds,
+                                          val_ds,
+                                          test_ds,
+                                          batch_size=32,
+                                          learning_rate=0.001,
+                                          raw_data_class_name="ravdess_raw_data_2d")
 
     # train the model:
     try:
-        handler_paper.train_model(epochs=50, verbose=True)
+        handler_2d.train_model(epochs=40, verbose=True)
     except KeyboardInterrupt:
         print("Training was interrupted by the user.")
 
     # # save the results in a plot:
-    handler_paper.plot_accuracies(f"DEPTH-MODEL-SGD-70-10-20-no-split-ACC")
-    handler_paper.plot_losses(f"DEPTH-MODEL-SGD-70-10-20-no-split-LOSS")
-    handler_paper.plot_confusion_matrix(f"DEPTH-MODEL-SGD-70-10-20--no-split-Confusion-Matrix")
+    handler_2d.plot_accuracies(f"DEPTH-MODEL-SGD-70-10-20-no-split-ACC")
+    handler_2d.plot_losses(f"DEPTH-MODEL-SGD-70-10-20-no-split-LOSS")
+    handler_2d.plot_confusion_matrix(f"DEPTH-MODEL-SGD-70-10-20--no-split-Confusion-Matrix")
 
 
 if __name__ == '__main__':
-    train_1channel()
-    #train_2channel()
+    #train_1channel()
+    train_2channel()
 

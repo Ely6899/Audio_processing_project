@@ -258,7 +258,6 @@ class EmotionSpecDataset2d(Dataset):
         self._data = data
         self._paths , self._labels = zip(*self._data)
 
-
         self.__label_encoder = LabelEncoder()
         self._labels = torch.tensor(self.__label_encoder.fit_transform(self._labels))
         self._class_names = list(self.__label_encoder.classes_)
@@ -312,19 +311,48 @@ class EmotionSpecDataset2d(Dataset):
 
 # add RavdessRawData in which every sample is two audio-file-paths: file2classify and originalneutral
 class RavdessRawDataWithNeutral(AudioRawData):
-    def __init__(self, include_calm: bool = False, include_aug: bool = False):
-        self._include_calm = include_calm
-        self._include_aug = include_aug
-        super().__init__(RavdessPaths.AUDIO_ORIGINAL_DATA, {".wav"}, r"^\d{2}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}$")
-
     def emotion_indexer(self, file_name: Path) -> str:
+        pass
+
+    def __init__(self, include_calm = True, include_aug=False):
+        self._include_aug = include_aug
+        self._include_calm = include_calm
+        super().__init__(RavdessPaths.ALL_AUDIO_DATA, {".wav"}, r"^\d{2}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}$")
+
+    def _scan_supported_files(self, file_pattern = r"^\d{2}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}$") -> set[Tuple[Tuple[Path, Path], str]]:
+        """
+        Scans and saves the file paths of the model and a relevant label based on the index in the name.
+        @return: A set of tuples, each tuple holds (file path, label).
+        """
+        self.neutral_data = Path(os.path.join(self._data_root, RavdessPaths.NEUTRAL_RELATIVE_PATH))
+        self.original_data = Path(os.path.join(self._data_root, RavdessPaths.ORIGINAL_RELATIVE_PATH))
+
+        base_name_pattern = re.compile(file_pattern)
+
+
+        files = {
+            (file, self.get_assosiated_neutral_file(file))
+            for file in self.original_data.rglob('*')
+            if file.is_file()
+            and any(file.name.endswith(suffix) for suffix in self._supported_formats)
+            and base_name_pattern.match(file.stem)
+        }
+
+        result = {
+            (tuple, self.get_attribute_from_filename(tuple[0], "emotion")[1])
+            for tuple in files
+        }
+
+        return result
+
+    def __get_emotion_from_index(self, filename):
         """
         For RAVDESS, label is indicated in the third number in the name. This function handles mapping it to a
         readable label.
-        :param file_name: File path from RAVDESS dataset.
-        :return: Label of the file according to the index.
+        @param filename: File path from RAVDESS dataset.
+        @return: Label of the file according to the index.
         """
-        numbers = re.findall(r'\d+', file_name.name.__str__())
+        numbers = re.findall(r'\d+', filename.name.__str__())
 
         index_emotion_mapping = {
             '01': 'neutral',
@@ -459,138 +487,138 @@ class RavdessRawDataWithNeutral(AudioRawData):
 # # TODO : add RavdessRawData in which every sample is two audio-file-paths: file2classify and originalneutral
 # # MICHAL
 # # TODO : CHECK IF IT IS RIGHT AND LOGICAL
-# class AudioRawDataWithOriginalNeutral(AudioRawData):
-#     def __init__(self):
-#         super().__init__(RavdessPaths.AUDIO_ORIGINAL_DATA, {".wav"}) # the path that will be the data root
-#
-#     def _scan_supported_files(self) -> set[Tuple[Path, str]]:
-#         """
-#         Scans and saves the file paths of the model and a relevant label based on the index in the name.
-#         @return: A set of tuples, each tuple holds (file path, label).
-#         """
-#
-#         files = {
-#         (file, self.get_path_of_neutral(file))
-#         for file in self._data_root.rglob('*')
-#         if file.is_file() and any(file.name.endswith(suffix) for suffix in self._supported_formats)
-#         }
-#
-#         result = set(map(lambda x: (x, AudioRawDataWithOriginalNeutral.__get_emotion_from_index(x[0])), files))
-#         return result
-#
-#     # MICHAL
-#     # TODO : CHECK IF IT IS RIGHT AND LOGICAL
-#     def get_path_of_neutral(self , original_file : Path):
-#
-#         filename = original_file.name  # e.g. "03-01-05-01-02-02-16.wav"
-#
-#         # Extract numbers from filename
-#         numbers = re.findall(r'\d+', filename)
-#
-#         # the case where the original audio is neutral - search for the same audio with different repetition value
-#         if self.get_attribute_from_filename(original_file,"emotion")[1] == "neutral" :
-#             """
-#             Given a neutral original RAVDESS audio file, returns the neutral version
-#             with different repetition value.
-#             """
-#             if self.get_attribute_from_filename(original_file,"repetition")[0] == '01' :
-#                 # Set repetition (index 5) to "02"
-#                 numbers[5] = '02'
-#             else :
-#                 # Set repetition (index 5) to "01"
-#                 numbers[5] = '01'
-#
-#                 # Reconstruct the new filename
-#             new_filename = '-'.join(numbers) + ".wav"
-#
-#             # The new file should be in the same actor folder as the original
-#             actor_folder = original_file.parent  # This is .../Actor_##/
-#
-#             neutral_file_path = actor_folder / new_filename
-#             return neutral_file_path
-#
-#         # the case where the original audio is not neutral - search for the same audio in neutral and repetition =1
-#         else :
-#             """
-#             Given an original RAVDESS audio file, returns the corresponding neutral version
-#             with repetition set to 01.
-#             """
-#             # Replace emotion (index 2) with "01" for neutral
-#             numbers[2] = "01"
-#
-#             # Set repetition (index 5) to "01"
-#             numbers[5] = "01"
-#
-#             # Reconstruct the new filename
-#             new_filename = '-'.join(numbers) + ".wav"
-#
-#             # The new file should be in the same actor folder as the original
-#             actor_folder = original_file.parent  # This is .../Actor_##/
-#
-#             neutral_file_path = actor_folder / new_filename
-#             return neutral_file_path
-#
-#
-#     @staticmethod
-#     def get_attribute_from_filename(filename, attribute: str):
-#         attribute2index = {
-#             "modality": 0,
-#             "vocal_channel": 1,
-#             "emotion": 2,
-#             "emotional_intensity": 3,
-#             "statement": 4,
-#             "repetition": 5,
-#             "actor": 6
-#         }
-#         num2attrvalue = {
-#             "modality": {"01": "full-AV", "02": "video-only", "03": "audio-only"},
-#             "vocal_channel": {"01": "speech", "02": "song"},
-#             "emotion": {"01": "neutral", "02": "calm", "03": "happy", "04": "sad", "05": "angry", "06": "fearful",
-#                         "07": "disgust", "08": "surprised"},
-#             "emotional_intensity": {"01": "normal", "02": "strong"},
-#             "statement": {"01": "kids", "02": "dogs"},
-#             "repetition": {"01": 1, "02": 2},
-#             "actor": {f"{i:02d}": i for i in range(1, 25)} # maps from string number to int number
-#         }
-#         ########################################################
-#         # e.g. filename: "03-01-02-01-02-01-13.wav"
-#                 # desired attribute: "actor"
-#         ########################################################
-#
-#         # get the filename numbers |
-#         file_numbers = re.findall(r'\d+', filename.name.__str__()) # e.g. ['03', '01', '02', '01', '02', '01', '13']
-#         # get the desired attribute index
-#         attribute_index = attribute2index[attribute] # e.g. 6 (actor)
-#         # get the desired attribute number
-#         attribute_number = file_numbers[attribute_index] # e.g. "13"(index 6 at the filename numbers)
-#         # get the desired attribute value
-#         attribute_value = num2attrvalue[attribute][attribute_number] # e.g. "13" -> 13
-#
-#         return attribute_number, attribute_value
-#
-#
-#     @staticmethod
-#     def __get_emotion_from_index(filename):
-#         """
-#         For RAVDESS, label is indicated in the third number in the name. This function handles mapping it to a
-#         readable label.
-#         @param filename: File path from RAVDESS dataset.
-#         @return: Label of the file according to the index.
-#         """
-#         numbers = re.findall(r'\d+', filename.name.__str__())
-#
-#         index_emotion_mapping = {
-#             '01': 'neutral',
-#             '02': 'calm',
-#             '03': 'happy',
-#             '04': 'sad',
-#             '05': 'angry',
-#             '06': 'fearful',
-#             '07': 'disgust',
-#             '08': 'surprised'
-#         }
-#
-#         emotion_index = numbers[2]
-#         emotion = index_emotion_mapping[emotion_index]
-#         return emotion
-#
+class AudioRawDataWithOriginalNeutral(AudioRawData):
+    def __init__(self):
+        super().__init__(RavdessPaths.AUDIO_ORIGINAL_DATA, {".wav"}) # the path that will be the data root
+
+    def _scan_supported_files(self) -> set[Tuple[Path, str]]:
+        """
+        Scans and saves the file paths of the model and a relevant label based on the index in the name.
+        @return: A set of tuples, each tuple holds (file path, label).
+        """
+
+        files = {
+        (file, self.get_path_of_neutral(file))
+        for file in self._data_root.rglob('*')
+        if file.is_file() and any(file.name.endswith(suffix) for suffix in self._supported_formats)
+        }
+
+        result = set(map(lambda x: (x, AudioRawDataWithOriginalNeutral.__get_emotion_from_index(x[0])), files))
+        return result
+
+    # MICHAL
+    # TODO : CHECK IF IT IS RIGHT AND LOGICAL
+    def get_path_of_neutral(self , original_file : Path):
+
+        filename = original_file.name  # e.g. "03-01-05-01-02-02-16.wav"
+
+        # Extract numbers from filename
+        numbers = re.findall(r'\d+', filename)
+
+        # the case where the original audio is neutral - search for the same audio with different repetition value
+        if self.get_attribute_from_filename(original_file,"emotion")[1] == "neutral" :
+            """
+            Given a neutral original RAVDESS audio file, returns the neutral version
+            with different repetition value.
+            """
+            if self.get_attribute_from_filename(original_file,"repetition")[0] == '01' :
+                # Set repetition (index 5) to "02"
+                numbers[5] = '02'
+            else :
+                # Set repetition (index 5) to "01"
+                numbers[5] = '01'
+
+                # Reconstruct the new filename
+            new_filename = '-'.join(numbers) + ".wav"
+
+            # The new file should be in the same actor folder as the original
+            actor_folder = original_file.parent  # This is .../Actor_##/
+
+            neutral_file_path = actor_folder / new_filename
+            return neutral_file_path
+
+        # the case where the original audio is not neutral - search for the same audio in neutral and repetition =1
+        else :
+            """
+            Given an original RAVDESS audio file, returns the corresponding neutral version
+            with repetition set to 01.
+            """
+            # Replace emotion (index 2) with "01" for neutral
+            numbers[2] = "01"
+
+            # Set repetition (index 5) to "01"
+            numbers[5] = "01"
+
+            # Reconstruct the new filename
+            new_filename = '-'.join(numbers) + ".wav"
+
+            # The new file should be in the same actor folder as the original
+            actor_folder = original_file.parent  # This is .../Actor_##/
+
+            neutral_file_path = actor_folder / new_filename
+            return neutral_file_path
+
+
+    @staticmethod
+    def get_attribute_from_filename(filename, attribute: str):
+        attribute2index = {
+            "modality": 0,
+            "vocal_channel": 1,
+            "emotion": 2,
+            "emotional_intensity": 3,
+            "statement": 4,
+            "repetition": 5,
+            "actor": 6
+        }
+        num2attrvalue = {
+            "modality": {"01": "full-AV", "02": "video-only", "03": "audio-only"},
+            "vocal_channel": {"01": "speech", "02": "song"},
+            "emotion": {"01": "neutral", "02": "calm", "03": "happy", "04": "sad", "05": "angry", "06": "fearful",
+                        "07": "disgust", "08": "surprised"},
+            "emotional_intensity": {"01": "normal", "02": "strong"},
+            "statement": {"01": "kids", "02": "dogs"},
+            "repetition": {"01": 1, "02": 2},
+            "actor": {f"{i:02d}": i for i in range(1, 25)} # maps from string number to int number
+        }
+        ########################################################
+        # e.g. filename: "03-01-02-01-02-01-13.wav"
+                # desired attribute: "actor"
+        ########################################################
+
+        # get the filename numbers |
+        file_numbers = re.findall(r'\d+', filename.name.__str__()) # e.g. ['03', '01', '02', '01', '02', '01', '13']
+        # get the desired attribute index
+        attribute_index = attribute2index[attribute] # e.g. 6 (actor)
+        # get the desired attribute number
+        attribute_number = file_numbers[attribute_index] # e.g. "13"(index 6 at the filename numbers)
+        # get the desired attribute value
+        attribute_value = num2attrvalue[attribute][attribute_number] # e.g. "13" -> 13
+
+        return attribute_number, attribute_value
+
+
+    @staticmethod
+    def __get_emotion_from_index(filename):
+        """
+        For RAVDESS, label is indicated in the third number in the name. This function handles mapping it to a
+        readable label.
+        @param filename: File path from RAVDESS dataset.
+        @return: Label of the file according to the index.
+        """
+        numbers = re.findall(r'\d+', filename.name.__str__())
+
+        index_emotion_mapping = {
+            '01': 'neutral',
+            '02': 'calm',
+            '03': 'happy',
+            '04': 'sad',
+            '05': 'angry',
+            '06': 'fearful',
+            '07': 'disgust',
+            '08': 'surprised'
+        }
+
+        emotion_index = numbers[2]
+        emotion = index_emotion_mapping[emotion_index]
+        return emotion
+

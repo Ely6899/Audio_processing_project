@@ -229,7 +229,7 @@ class SentimentModelHandler:
         print("Test score", self._test_score)
 
         if save_model:
-            torch.save(self._model, Path(f"{self._model.__class__.__name__}_70-10-20.pt"), _use_new_zipfile_serialization=True)
+            torch.save(self._model, Path(f"{self._model.__class__.__name__}_70-10-20_2d.pt"), _use_new_zipfile_serialization=True)
 
 
 
