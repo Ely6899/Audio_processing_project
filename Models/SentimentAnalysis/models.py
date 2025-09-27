@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from typing import Callable
 
@@ -100,8 +101,8 @@ class SentimentModelHandler:
         Trains a single epoch across a dataloader.
         @return: Loss average across batches, number of correct classifications and total samples.
         """
-        self._true_labels_train.clear()
-        self._pred_labels_train.clear()
+        temp_true_labels_train = []
+        temp_pred_labels_train = []
 
         self._model.train()
         running_loss = 0.0
@@ -123,9 +124,13 @@ class SentimentModelHandler:
             predictions = output.argmax(1)
             correct += (predictions == label).sum().item()
 
-            self._true_labels_train.extend(label.cpu().numpy())
-            self._pred_labels_train.extend(predictions.cpu().numpy())
+            temp_true_labels_train.extend(label.cpu().numpy())
+            temp_pred_labels_train.extend(predictions.cpu().numpy())
 
+        # update the main lists after epoch ends
+        self._true_labels_train = temp_true_labels_train
+        self._pred_labels_train = temp_pred_labels_train
+        
         self._scheduler.step()
         total_samples = len(self._train_loader.dataset)
 
@@ -136,8 +141,8 @@ class SentimentModelHandler:
         Validates a single epoch across a dataloader.
         @return: Loss average across batches, number of correct classifications and total samples.
         """
-        self._true_labels_val.clear()
-        self._pred_labels_val.clear()
+        temp_true_labels_val = []
+        temp_pred_labels_val = []
 
         self._model.eval()
         running_loss = 0.0
@@ -155,13 +160,17 @@ class SentimentModelHandler:
                 predictions = output.argmax(1)
                 correct += (predictions == label).sum().item()
 
-                self._true_labels_val.extend(label.cpu().numpy())
-                self._pred_labels_val.extend(predictions.cpu().numpy())
-
+                temp_true_labels_val.extend(label.cpu().numpy())
+                temp_pred_labels_val.extend(predictions.cpu().numpy())
+        
+        # update the main lists after epoch ends
+        self._true_labels_val = temp_true_labels_val
+        self._pred_labels_val = temp_pred_labels_val
+        
         total_samples = len(self._val_loader.dataset)
         return running_loss / total_samples, correct, total_samples
 
-    def train_model(self, epochs: int = 10, verbose: bool = False, save_model: bool = False):
+    def train_model(self, epochs: int = 10, verbose: bool = False):
         """
         Applies the entire training logic and saves the results.
         @param epochs: Number of epochs to train the model. Defaults to 10.
@@ -196,9 +205,6 @@ class SentimentModelHandler:
                 print(results_string)
                 print("--------------------------------\n")
 
-        if save_model:
-            torch.save(self._model, Path(f"{self._model.__class__.__name__}.pt"), _use_new_zipfile_serialization=True)
-
     def __str__(self):
         return (f"Model name: {self._model.__class__.__name__}\n"
                 f"Device: {self._device}\n"
@@ -231,6 +237,18 @@ class SentimentModelHandler:
     def __generate_plot_title(self) -> str:
         return (f"{self.model_name}_"
                 f"")
+
+    def ask_to_save_model(self, option: str = 'default'):
+        if option != 'default':
+            user_input = input("what name to save the model? ('n' to avoid saving, 'd' to use default): ")
+        else: 
+            user_input = 'd'
+        if user_input.lower() == 'n':
+            print("Model not saved.")
+        elif user_input.lower() == 'd':
+            torch.save(self._model, Path(os.path.join(self._results.base_dir, f"{self._model.__class__.__name__}.pt")), _use_new_zipfile_serialization=True)
+        else:
+            torch.save(self._model, Path(os.path.join(self._results.base_dir, f"{user_input}.pt")), _use_new_zipfile_serialization=True)
 
     def plot_losses(self, file_name: str | None = None):
         file_name = f"{self._model.__class__.__name__}_losses" if None else file_name
