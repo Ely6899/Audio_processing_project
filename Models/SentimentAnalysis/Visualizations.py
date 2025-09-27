@@ -77,7 +77,7 @@ def plot_waveform(waveform, sample_rate):
 
 def plot_mel_spectrogram(mel_spec, sr=SAMPLE_RATE, hop_length=HOP_LENGTH, block=True):
     """
-    Plot a mel spectrogram.
+    Plot a mel spectrogram on a given matplotlib Axes.
     """
     if isinstance(mel_spec, torch.Tensor):
         mel_spec = mel_spec.squeeze().numpy()  # Remove extra dimensions and convert to NumPy
@@ -136,8 +136,9 @@ def plot_accuracy_per_epoch(
     **kwargs):
     training_accuracy = kwargs.get("training_accuracy", None)
     validation_accuracy = kwargs.get("validation_accuracy", None)
+    test_accuracy = kwargs.get("test_accuracy", None)
 
-    if training_accuracy is None and validation_accuracy is None:
+    if training_accuracy is None and validation_accuracy is None and test_accuracy is None:
         print("No data given for plotting")
     else:
         # Plot
@@ -148,6 +149,20 @@ def plot_accuracy_per_epoch(
 
         if validation_accuracy is not None:
             plt.plot(validation_accuracy, marker='o', linestyle='--', color='r', label='Validation Accuracy')
+
+        if test_accuracy is not None:
+            test_accuracy *= 100
+            plt.axhline(y=test_accuracy, color='g', linestyle=':', linewidth=2, label="Test Accuracy")
+            # Add text label near the line
+            plt.text(
+                x=len(training_accuracy) + 1 if training_accuracy else 0,  # position to the right
+                y=test_accuracy + 0.6,  # slight offset above the line
+                s=f"{test_accuracy:.2f}%",
+                color="g",
+                fontsize=10,
+                fontweight="bold"
+            )
+
         plt.xlabel('Epoch')
         plt.ylabel('Accuracy')
         plt.title('Training and Validation Accuracy per Epoch')
@@ -169,6 +184,7 @@ def plot_confusion_matrix(
     **kwargs):
     train_values_data: Optional[Tuple[list, list, list]]= kwargs.get("train_label_data")
     val_values_data: Optional[Tuple[list, list, list]] = kwargs.get("val_label_data")
+    test_values_data: Optional[Tuple[list, list, list]] = kwargs.get("test_label_data")
 
     if not train_values_data and not val_values_data:
         print("No data provided for confusion matrices")
@@ -181,7 +197,7 @@ def plot_confusion_matrix(
         train_truth_labels, train_pred_labels, train_classes = train_values_data
         assert len(train_truth_labels) > 0 and len(train_pred_labels) > 0, "train_truth_labels or train_pred_labels is empty!"
         conf_matrices.append(confusion_matrix(np.array(train_truth_labels).flatten(), np.array(train_pred_labels).flatten()))
-        titles.append("Train Confusion Matrix")
+        titles.append("Train")
         data_classes.append(train_classes)
 
     if val_values_data:
@@ -189,8 +205,16 @@ def plot_confusion_matrix(
         assert len(val_truth_labels) > 0 and len(val_truth_labels) > 0, "val_truth_labels or val_pred_labels is empty!"
 
         conf_matrices.append(confusion_matrix(np.array(val_truth_labels).flatten(), np.array(val_pred_labels).flatten()))
-        titles.append("Validation Confusion Matrix")
+        titles.append("Validation")
         data_classes.append(val_classes)
+
+    if test_values_data:
+        test_truth_labels, test_pred_labels, test_classes = test_values_data
+        assert len(test_truth_labels) > 0 and len(test_pred_labels) > 0, "val_truth_labels or val_pred_labels is empty!"
+
+        conf_matrices.append(confusion_matrix(np.array(test_truth_labels).flatten(), np.array(test_pred_labels).flatten()))
+        titles.append("Test")
+        data_classes.append(test_classes)
 
     fig, axes = plt.subplots(1, len(conf_matrices), figsize=(7 * len(conf_matrices), 10))
 
@@ -198,11 +222,17 @@ def plot_confusion_matrix(
     if len(conf_matrices) == 1:
         axes = [axes]
 
+    split_cmaps = {
+        "Train": "Blues",
+        "Validation": "Oranges",
+        "Test": "Greens"
+    }
+
     for ax, conf_matrix, title, class_names in zip(axes, conf_matrices, titles, data_classes):
         sns.heatmap(conf_matrix,
                     annot=True,
                     fmt="d",
-                    cmap="Blues" if "Train" in title else "Oranges",
+                    cmap=split_cmaps[title],
                     xticklabels=class_names,
                     yticklabels=class_names,
                     ax=ax)
@@ -264,6 +294,3 @@ def save_mel_spectrogram(
         
     plt.savefig(final_path, bbox_inches="tight")
     plt.close()  # Close the figure to free memory
-    
-    
-    

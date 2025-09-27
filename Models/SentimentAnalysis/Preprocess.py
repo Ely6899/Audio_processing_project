@@ -44,9 +44,9 @@ def scale_between_minus_one_and_one(spectrogram: np.ndarray) -> np.ndarray:
 def audio_to_waveform(file_path: Path, target_sample_rate: int = SAMPLE_RATE):
     """
     Given audio file path and target sample rate, extracts waveform data.
-    @param file_path: Audio file path.
-    @param target_sample_rate: Desired sample rate.
-    @return: Waveform data and the target sample rate.
+    :param file_path: Audio file path.
+    :param target_sample_rate: Desired sample rate.
+    :return: Waveform data and the target sample rate.
     """
     waveform, loaded_sample_rate = librosa.load(file_path, mono=True, sr=target_sample_rate)
     logger.debug(f"Loaded audio file with shape: {waveform.shape}")
@@ -70,16 +70,16 @@ def audio_to_mel_spectrogram(file_path: Path,
                             normalization_fn: Callable[[np.ndarray], np.ndarray] = standardization):
     """
     Given audio file path, extracts its waveform and from it creates a mel-spectrogram.
-    @param resizing: True if you wish to resize the spectrogram to a fixed length.
-    @param file_path: Audio file path.
-    @param sample_rate: Desired sample rate.
-    @param n_fft: Number of fft values. Defaults to the N_FFT preprocess macro.
-    @param window_length: Spectrogram window length. Defaults to WINDOW_LENGTH marco.
-    @param hop_length: Hop length in frames for spectrogram.
-    @param n_mels: Number of frequency bins for the spectrogram. Defaults to FREQUENCY_BIN_COUNT macro.
-    @param max_length_in_seconds: Limit on the length of spectrogram in seconds. Defaults to MAX_SPECTROGRAM_DURATION_IN_SECONDS
-    @param normalization_fn: Function that normalizes the spectrogram. Defaults to standardization.
-    @return: Mel-spectrogram with the desired attributes.
+    :param resizing: True if you wish to resize the spectrogram to a fixed length.
+    :param file_path: Audio file path.
+    :param sample_rate: Desired sample rate.
+    :param n_fft: Number of fft values. Defaults to the N_FFT preprocess macro.
+    :param window_length: Spectrogram window length. Defaults to WINDOW_LENGTH marco.
+    :param hop_length: Hop length in frames for spectrogram.
+    :param n_mels: Number of frequency bins for the spectrogram. Defaults to FREQUENCY_BIN_COUNT macro.
+    :param max_length_in_seconds: Limit on the length of spectrogram in seconds. Defaults to MAX_SPECTROGRAM_DURATION_IN_SECONDS
+    :param normalization_fn: Function that normalizes the spectrogram. Defaults to standardization.
+    :return: Mel-spectrogram with the desired attributes.
     """
     waveform, sample_rate = audio_to_waveform(file_path, sample_rate)
 
