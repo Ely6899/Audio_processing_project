@@ -15,10 +15,11 @@ from torch.utils.data import DataLoader, Dataset
 import tqdm
 
 from Preprocess import audio_to_mel_spectrogram
-from PreprocessParams import TARGET_FRAMES, FREQUENCY_BIN_COUNT
+from PreprocessParams import LABEL_STRINGS, TARGET_FRAMES, FREQUENCY_BIN_COUNT
 from concepts_creation import generate_random_pattern_spectrogram
 from tqdm import tqdm
 
+from ConstPaths import TessPaths, conceptPaths
 
 
 CONCEPT_UNIQUE_NAMES = [
@@ -82,7 +83,7 @@ class PreGeneratedConceptDataset(Dataset):
     PyTorch Dataset that pre-generates the dataset for a specific concept in memory.
     """
 
-    def __init__(self, n_samples: int, concept_name: str, root_concept_dir: Path = Path("positive concepts dataset") , freq_count = FREQUENCY_BIN_COUNT, frames_count = TARGET_FRAMES, rng_seed: Optional[int] = None):
+    def __init__(self, n_samples: int, concept_name: str, root_concept_dir: Path = conceptPaths.ALL_CONCEPTS, freq_count = FREQUENCY_BIN_COUNT, frames_count = TARGET_FRAMES, rng_seed: Optional[int] = None):
         self.n_samples = n_samples
         self.concept_name = concept_name
         self.root_concept_dir = root_concept_dir
@@ -113,12 +114,12 @@ class PreGeneratedConceptDataset(Dataset):
 
 # Functions
 
-def init_tcav_with_pamalia_dict():
+def init_tcav_with_pamalia_dict(model_path: Optional[Path] = Path("ResNetWithAttention.pt")):
     # -----------------------------
     # 1️⃣ Load pretrained model
     # -----------------------------
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = torch.load(Path("ResNetWithAttention.pt"), map_location=device, weights_only=False)
+    model = torch.load(model_path, map_location=device, weights_only=False)
     model.eval()
 
     # -----------------------------
@@ -238,8 +239,8 @@ def _tcav_dict_per_sample_to_df(scores_by_sample: dict, concept_names: list[str]
 
 
 # all_filtered_data is for droping men samples and/or false positive samples 
-def _get_tcav_dict_per_sample(all_filtered_data: pd.DataFrame): 
-    tcav_dict = init_tcav_with_pamalia_dict()
+def _get_tcav_dict_per_sample(all_filtered_data: pd.DataFrame, model_path: Optional[Path] = Path("ResNetWithAttention.pt")) -> dict: 
+    tcav_dict = init_tcav_with_pamalia_dict(model_path=model_path)
     tcav = tcav_dict['tcav']
     positive_concepts = tcav_dict['positive_concepts']
     random_concept = tcav_dict['random_concept']
@@ -256,7 +257,14 @@ def _get_tcav_dict_per_sample(all_filtered_data: pd.DataFrame):
         label_name = row['predicted_label']
         path = row['path']
         sample = torch.tensor(audio_to_mel_spectrogram(Path(path)), dtype=torch.float32).unsqueeze(0).unsqueeze(0)  # shape [1, 1, H, W]
-        label_index = list(LABEL_EMOTION_MAPPING.keys())[list(LABEL_EMOTION_MAPPING.values()).index(label_name)]
+        label_2_index = {LABEL_STRINGS.ANGRY: 0,
+                         LABEL_STRINGS.DISGUSTED: 1,
+                         LABEL_STRINGS.FEARFUL: 2,
+                         LABEL_STRINGS.HAPPY: 3,
+                         LABEL_STRINGS.NEUTRAL: 4,
+                         LABEL_STRINGS.SAD: 5,
+                         LABEL_STRINGS.SURPRISED: 6}
+        label_index = label_2_index.get(label_name)
         tcav_dict_per_sample[path] = {}
         
         score_for_label = tcav.interpret(
@@ -270,8 +278,8 @@ def _get_tcav_dict_per_sample(all_filtered_data: pd.DataFrame):
     
     return tcav_dict_per_sample
 
-def get_tcav_per_sample():
-    df_attributes = pd.read_csv("attributes/all_attributes.csv")
+def get_tcav_per_sample(attribute_csv_path: Path, model_path: Optional[Path]) -> pd.DataFrame:
+    df_attributes = pd.read_csv(attribute_csv_path)
 
     # ## !debug:
     # df_attributes = df_attributes.head(10)
@@ -279,9 +287,9 @@ def get_tcav_per_sample():
     
 
     # drop unnecessary columns
-    df_attributes.drop(columns=[f'prob {emotion}' for emotion in LABEL_EMOTION_MAPPING.values()], inplace=True)
+    df_attributes.drop(columns=df_attributes.filter(regex=r'^prob ').columns, inplace=True)
 
-    dic = _get_tcav_dict_per_sample(df_attributes)
+    dic = _get_tcav_dict_per_sample(df_attributes, model_path=model_path)
     
     df_tcav = _tcav_dict_per_sample_to_df(dic, CONCEPT_UNIQUE_NAMES)
     
@@ -296,6 +304,5 @@ def get_tcav_per_sample():
 
 
 if __name__ == "__main__":
-    from tcav_demo import get_tcav_per_sample
-    df_merged = get_tcav_per_sample()
-    df_merged.to_csv("tcav_per_sample_with_acc.csv", index=False)
+    df_merged = get_tcav_per_sample(attribute_csv_path=TessPaths.PROB_VECTOR_SHUFFLED, model_path=Path(r"TESS\models\2025-09-25_11-23-34\ResNetWithAttention_Tess_spk_shuffeled.pt"))
+    df_merged.to_csv("Tcav_Tess_spk_shuffeled.csv", index=False)
