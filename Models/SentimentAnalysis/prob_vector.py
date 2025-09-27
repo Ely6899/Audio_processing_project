@@ -5,9 +5,10 @@ import pandas as pd
 from sklearn.calibration import LabelEncoder
 import torch
 import tqdm
+from ConstPaths import TessPaths
 from PreprocessParams import LABEL_STRINGS, MAX_SPECTOGRAM_DURATION_IN_SECONDS
 from Preprocess import audio_to_mel_spectrogram
-from audio_dataset import AllRawData, EmotionSpecDataset, RavdessRawData
+from audio_dataset import AllRawData, EmotionSpecDataset, RavdessRawData, TESSRawData
 from models import ResNetWithAttention
 from pprint import pprint
 import torch.nn as nn
@@ -82,14 +83,15 @@ def get_raw_sample_attributes(model, raw_data_sample):
     probabilities = get_sample_probabilities_of_model(model, tensor_mel_spec)
     
     # get the de/encoding from classes(nums 0-7 for model) to labels(strings)
-    labels = ['angry',
-            'calm',
-            'disgust',
-            'fearful',
-            'happy',
-            'neutral',
-            'sad',
-            'surprised']
+    labels = [
+                LABEL_STRINGS.ANGRY,
+                LABEL_STRINGS.DISGUSTED,
+                LABEL_STRINGS.FEARFUL,
+                LABEL_STRINGS.HAPPY,
+                LABEL_STRINGS.NEUTRAL,
+                LABEL_STRINGS.SURPRISED,
+                LABEL_STRINGS.SAD
+             ]
     label_encoder = LabelEncoder()
     label_encoder.fit(labels) # order Doesn't matter!
     
@@ -105,25 +107,10 @@ def get_raw_sample_attributes(model, raw_data_sample):
     attr["predicted_label"] = predicted_class_label
     attr["predicted_probability"] = float(probabilities[predicted_class_idx])
 
-    # Convert the dictionary to a pandas Series with a custom order
-    # Define the order of attributes in the Series
-    attr_order = [
-        'path', 
-        'true_label', 
-        'predicted_label', 
-        'predicted_probability',
-        'prob angry', 
-        'prob calm', 
-        'prob disgust', 
-        'prob fearful', 
-        'prob happy', 
-        'prob neutral', 
-        'prob sad', 
-        'prob surprised'
-    ]
+    # Convert the dictionary to a pandas Series
     
     # Create a Series with the specified order WARNING: This will only include keys that are present in attr_order
-    attr_series = pd.Series({k: attr[k] for k in attr_order if k in attr})
+    attr_series = pd.Series(attr)
     
     return attr_series
 
@@ -358,27 +345,21 @@ def test2():
     print(preds[:4])  # Print first 4 predictions
     
 if __name__ == "__main__":
-    # ######### Probability Vector Dataframe #########
+    ######### Probability Vector Dataframe #########
 
-    # # raw data loading:
-    # ravdess_raw_data = RavdessRawData(include_calm=True, include_aug=False)
+    # raw data loading:
+    tess_raw_data = TESSRawData()
 
-    # ravdess_raw_data.print_all_label_counts()
+    data = set(list(tess_raw_data.all_data))
 
-    # all_raw_data = AllRawData((ravdess_raw_data, ))
+    # Load the model weights
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = torch.load(r"TESS\models\2025-09-25_11-23-34\ResNetWithAttention_Tess_spk_shuffeled.pt", map_location=device)
     
-    # data = set(list(all_raw_data.all_data)[:100])
+    # Get the attributes for the sample
+    attributes = get_raw_dataset_attributes(model, data)
     
-    # # create the model:
-    # model = ResNetWithAttention(num_classes=8)
+    # save the df to csv
+    attributes.to_csv(r"TESS\prob_vector_tables\tess_spk_shuffled_prob_vector.csv", index=False)
+    print("Saved to tess_spk_shuffled_prob_vector.csv")
 
-    # # Load the model weights
-    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    # model = torch.load("Eli ResNetWithAttention.pt", map_location=device)
-    
-    # # Get the attributes for the sample
-    # attributes = get_raw_dataset_attributes(model, data)
-    # pprint(attributes[:4])
-    
-    test2()
-    
