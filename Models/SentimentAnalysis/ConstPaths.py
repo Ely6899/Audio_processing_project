@@ -9,18 +9,25 @@ class MeldPaths(EnumType):
     TEST_DATA_CSV = Path(os.path.join("test.csv"))
 
 class RavdessPaths(EnumType):
-    ORIGINAL_RELATIVE_PATH = 'original_data'
-    NEUTRAL_RELATIVE_PATH = 'neutral_synthesized'
-    ALL_AUDIO_DATA = Path(os.path.join("RAVDESS"))
-    AUDIO_ORIGINAL_DATA = Path(os.path.join(ALL_AUDIO_DATA, ORIGINAL_RELATIVE_PATH))
-    AUDIO_NEUTRAL_SYNTHESIZED_DATA = Path(os.path.join(ALL_AUDIO_DATA, NEUTRAL_RELATIVE_PATH))
+    ALL_AUDIO_DATA = Path(os.path.join(r"RAVDESS\RAVDESS DATASET"))
+    AUDIO_ORIGINAL_DATA = Path(os.path.join(ALL_AUDIO_DATA, 'original_data'))
+    AUDIO_NEUTRAL_SYNTHESIZED_DATA = Path(os.path.join(ALL_AUDIO_DATA, 'neutral_synthesized'))
     TXT_FOR_DEEPFAKE_PATH = Path(os.path.join(ALL_AUDIO_DATA, "txt_for_deepfake"))
-    WORD_CHUNKED_AUDIO_DATA = Path(os.path.join(ALL_AUDIO_DATA, "chunked_word_audio"))
+    #?depracated WORD_CHUNKED_AUDIO_DATA = Path(os.path.join(ALL_AUDIO_DATA, "chunked_word_audio")) #?depracated
     DOUBLE_SENTENCE_AUDIO_DATA = Path(os.path.join(ALL_AUDIO_DATA, "double_sentence_audio"))
 
 class CremaPaths(EnumType):
-    ALL_AUDIO_DATA = Path(os.path.join("CREMA-D"))
+    ALL_AUDIO_DATA = Path(os.path.join(r"CREMA-D\CREMA-D DATASET"))
     WAV_DATA = Path(os.path.join(ALL_AUDIO_DATA, 'AudioWAV'))
     
 class TessPaths(EnumType):
-    ALL_DATA = Path(os.path.join("TESS"))
+    ROOT_DIR = Path(r"TESS")
+    ALL_DATA = Path(os.path.join(ROOT_DIR, "TESS_DATASET"))
+    TRAIN_DATA = Path(os.path.join(ALL_DATA , "train"))
+    TEST_DATA = Path(os.path.join(ALL_DATA , "test"))
+    PROB_VECTOR_SHUFFLED = Path(ROOT_DIR, "prob_vector_tables", "tess_spk_shuffled_prob_vector.csv")
+    PROB_VECTOR_SPLITTED = Path(ROOT_DIR, "prob_vector_tables", "tess_spk_splitted_prob_vector.csv")
+    
+class conceptPaths(EnumType):
+    ALL_CONCEPTS = Path(os.path.join(r"positive concepts\positive concepts dataset"))
+    
