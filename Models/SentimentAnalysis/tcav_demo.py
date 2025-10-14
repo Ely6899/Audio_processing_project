@@ -23,18 +23,18 @@ from ConstPaths import TessPaths, conceptPaths
 
 
 CONCEPT_UNIQUE_NAMES = [
-                        "long_constant_thick",
-                        "long_dropping_flat_thick",
-                        "long_dropping_steep_thick",
-                        "long_dropping_steep_thin",
-                        "long_rising_flat_thick",
-                        "long_rising_steep_thick",
-                        "long_rising_steep_thin",
-                        "short_constant_thick",
-                        "short_dropping_steep_thick",
-                        "short_dropping_steep_thin",
-                        "short_rising_steep_thick",
-                        "short_rising_steep_thin"
+                        "long-constant-thick",
+                        "long-dropping-flat-thick",
+                        "long-dropping-steep-thick",
+                        "long-dropping-steep-thin",
+                        "long-rising-flat-thick",
+                        "long-rising-steep-thick",
+                        "long-rising-steep-thin",
+                        "short-constant-thick",
+                        "short-dropping-steep-thick",
+                        "short-dropping-steep-thin",
+                        "short-rising-steep-thick",
+                        "short-rising-steep-thin"
                         ]
 
 INDEX_EMOTION_MAPPING = {
@@ -114,7 +114,7 @@ class PreGeneratedConceptDataset(Dataset):
 
 # Functions
 
-def init_tcav_with_pamalia_dict(model_path: Optional[Path] = Path("ResNetWithAttention.pt")):
+def init_tcav_with_pamalia_dict(model_path: Path, concept_samples_count: int = 100) -> dict:
     # -----------------------------
     # 1️⃣ Load pretrained model
     # -----------------------------
@@ -145,16 +145,17 @@ def init_tcav_with_pamalia_dict(model_path: Optional[Path] = Path("ResNetWithAtt
     negative_concept_dataset = PreGeneratedRandomSpectrogramDataset(n_samples=100, freq_count=FREQUENCY_BIN_COUNT, frames=TARGET_FRAMES)
     random_concept = Concept(id=len(positive_concepts), name='random', data_iter=DataLoader(negative_concept_dataset, shuffle=False))
     
-    return {'tcav': tcav, 'positive_concepts': positive_concepts, 'random_concept': random_concept, 'layer': layer}
+    return {'tcav': tcav, 'positive-concepts': positive_concepts, 'random-concept': random_concept, 'layer': layer}
 
 
 def _compute_cav_accuracy_df(tcav: TCAV,
                              positive_concepts: List[Concept],
-                             random_concept: Concept) -> pd.DataFrame:
+                             random_concept: Concept,
+                             float_precision: int = 3) -> pd.DataFrame:
     """
     Trains / loads CAVs once and extracts the linear concept-classifier accuracy
     per (concept, layer). Returns a DataFrame with columns:
-    [concept_name, layer_name, cav_acc]
+    [concept name, layer name, cav acc]
     """
     # One experimental set per concept: [concept, random]
     experimental_sets = [[c, random_concept] for c in positive_concepts]
@@ -180,18 +181,18 @@ def _compute_cav_accuracy_df(tcav: TCAV,
             if isinstance(acc, torch.Tensor):
                 acc = acc.detach().cpu().item()
             rows.append({
-                "concept_name": concept_name,
-                "layer_name": layer_name,
-                "cav_acc": float(acc) if acc is not None else np.nan,
+                "concept name": concept_name,
+                "layer name": layer_name,
+                "cav acc": round(float(acc), float_precision) if acc is not None else np.nan,
             })
 
-    return pd.DataFrame(rows, columns=["concept_name", "layer_name", "cav_acc"])
+    return pd.DataFrame(rows, columns=["concept name", "layer name", "cav acc"])
 
 
-def _tcav_dict_per_sample_to_df(scores_by_sample: dict, concept_names: list[str]) -> pd.DataFrame:
+def _tcav_dict_per_sample_to_df(tcav_raw_dict: dict, scores_by_sample: dict, concept_names: list[str], model_path: Path, float_precision: int = 3) -> pd.DataFrame:
     # """
     # Flatten Captum TCAV results into a DataFrame with:
-    # columns = ["label_name", "concept_name", "layer_name", "positive_percentage", "magnitude"]
+    # columns = ["label name", "concept name", "layer name", "positive percentage", "magnitude"]
     # """
     rows = []
     for path, exp_sets in scores_by_sample.items():
@@ -221,29 +222,27 @@ def _tcav_dict_per_sample_to_df(scores_by_sample: dict, concept_names: list[str]
                 # Positive direction = index 0
                 rows.append({
                     "path": path,
-                    "concept_name": concept_name,
-                    "layer_name": layer_name,
-                    "positive_percentage": float(sc[0]),
-                    "magnitude": float(mg[0]),
+                    "concept name": concept_name,
+                    "layer name": layer_name,
+                    "positive percentage": round(float(sc[0]), float_precision),
+                    "magnitude": round(float(mg[0]), float_precision),
                 })
     per_sample_df = pd.DataFrame(rows, columns=[
-        "path", "concept_name", "layer_name", "positive_percentage", "magnitude"
+        "path", "concept name", "layer name", "positive percentage", "magnitude"
     ])
     
-    tcav_dict = init_tcav_with_pamalia_dict()
-    acc_df = _compute_cav_accuracy_df(tcav=tcav_dict['tcav'], positive_concepts=tcav_dict['positive_concepts'], random_concept=tcav_dict['random_concept'])
-    # acc_df has columns: ["concept_name", "layer_name", "cav_acc"]
-    # merge each row of acc_df with every row in per_sample_df that has the same concept_name and layer_name
-    per_sample_acc_df = per_sample_df.merge(acc_df, on=["concept_name", "layer_name"], how="left")
+    acc_df = _compute_cav_accuracy_df(tcav=tcav_raw_dict['tcav'], positive_concepts=tcav_raw_dict['positive-concepts'], random_concept=tcav_raw_dict['random-concept'])
+    # acc_df has columns: ["concept name", "layer name", "cav acc"]
+    # merge each row of acc_df with every row in per_sample_df that has the same concept name and layer name
+    per_sample_acc_df = per_sample_df.merge(acc_df, on=["concept name", "layer name"], how="left")
     return per_sample_acc_df
 
 
 # all_filtered_data is for droping men samples and/or false positive samples 
-def _get_tcav_dict_per_sample(all_filtered_data: pd.DataFrame, model_path: Optional[Path] = Path("ResNetWithAttention.pt")) -> dict: 
-    tcav_dict = init_tcav_with_pamalia_dict(model_path=model_path)
-    tcav = tcav_dict['tcav']
-    positive_concepts = tcav_dict['positive_concepts']
-    random_concept = tcav_dict['random_concept']
+def _get_tcav_dict_per_sample(tcav_raw_dict: dict, all_filtered_data: pd.DataFrame, model_path: Path, label_2_index: dict) -> dict: 
+    tcav = tcav_raw_dict['tcav']
+    positive_concepts = tcav_raw_dict['positive-concepts']
+    random_concept = tcav_raw_dict['random-concept']
     
     # Debug call, don't uncomment
     # show_arrays_in_separate_windows(negative_concept_dataset.get_data)
@@ -254,16 +253,10 @@ def _get_tcav_dict_per_sample(all_filtered_data: pd.DataFrame, model_path: Optio
     
     # for row(pandas series) in df:
     for i, row in tqdm(all_filtered_data.iterrows(), total=len(all_filtered_data), desc="Processing samples"):
-        label_name = row['predicted_label']
+        label_name = row['predicted label']
         path = row['path']
         sample = torch.tensor(audio_to_mel_spectrogram(Path(path)), dtype=torch.float32).unsqueeze(0).unsqueeze(0)  # shape [1, 1, H, W]
-        label_2_index = {LABEL_STRINGS.ANGRY: 0,
-                         LABEL_STRINGS.DISGUSTED: 1,
-                         LABEL_STRINGS.FEARFUL: 2,
-                         LABEL_STRINGS.HAPPY: 3,
-                         LABEL_STRINGS.NEUTRAL: 4,
-                         LABEL_STRINGS.SAD: 5,
-                         LABEL_STRINGS.SURPRISED: 6}
+        
         label_index = label_2_index.get(label_name)
         tcav_dict_per_sample[path] = {}
         
@@ -278,21 +271,23 @@ def _get_tcav_dict_per_sample(all_filtered_data: pd.DataFrame, model_path: Optio
     
     return tcav_dict_per_sample
 
-def get_tcav_per_sample(attribute_csv_path: Path, model_path: Optional[Path]) -> pd.DataFrame:
+def get_tcav_per_sample(attribute_csv_path: Path, model_path: Path, label_2_index: dict) -> pd.DataFrame:
     df_attributes = pd.read_csv(attribute_csv_path)
 
     # ## !debug:
-    # df_attributes = df_attributes.head(10)
+    df_attributes = df_attributes.head(10)
     # ## !debug
     
 
     # drop unnecessary columns
     df_attributes.drop(columns=df_attributes.filter(regex=r'^prob ').columns, inplace=True)
 
-    dic = _get_tcav_dict_per_sample(df_attributes, model_path=model_path)
+    tcav_raw_dict = init_tcav_with_pamalia_dict(model_path=model_path, concept_samples_count=100)
     
-    df_tcav = _tcav_dict_per_sample_to_df(dic, CONCEPT_UNIQUE_NAMES)
-    
+    tcav_proccessed_dict = _get_tcav_dict_per_sample(tcav_raw_dict=tcav_raw_dict, all_filtered_data=df_attributes, model_path=model_path, label_2_index=label_2_index)
+
+    df_tcav = _tcav_dict_per_sample_to_df(tcav_raw_dict=tcav_raw_dict, scores_by_sample=tcav_proccessed_dict, concept_names=CONCEPT_UNIQUE_NAMES, model_path=model_path)
+
     # create a new df, which is df_tcav but added attributes from df_attributes based on the 'path' column
     df_merged = df_tcav.merge(df_attributes, on='path', how='left')
 
@@ -304,5 +299,17 @@ def get_tcav_per_sample(attribute_csv_path: Path, model_path: Optional[Path]) ->
 
 
 if __name__ == "__main__":
-    df_merged = get_tcav_per_sample(attribute_csv_path=TessPaths.PROB_VECTOR_SHUFFLED, model_path=Path(r"TESS\models\2025-09-25_11-23-34\ResNetWithAttention_Tess_spk_shuffeled.pt"))
-    df_merged.to_csv("Tcav_Tess_spk_shuffeled.csv", index=False)
+    label_2_index = {
+        LABEL_STRINGS.ANGRY: 0,
+        LABEL_STRINGS.DISGUSTED: 1,
+        LABEL_STRINGS.FEARFUL: 2,
+        LABEL_STRINGS.HAPPY: 3,
+        LABEL_STRINGS.NEUTRAL: 4,
+        LABEL_STRINGS.SAD: 5
+    }
+    df_merged = get_tcav_per_sample(
+                                    attribute_csv_path=Path(r'CREMA-D\prob_vector_tables\with test cremaD speaker shuffled.csv'),
+                                    model_path=Path(r"CREMA-D\models\2025-09-29_14-16-05\ResNetWithAttention.pt"),
+                                    label_2_index=label_2_index
+                                   )
+    df_merged.to_csv(Path(r"CREMA-D\TCAV\with-test Tcav-per-sample cremaD.csv"), index=False)

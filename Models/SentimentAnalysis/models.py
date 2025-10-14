@@ -233,9 +233,6 @@ class SentimentModelHandler:
                 print(results_string)
                 print("--------------------------------\n")
 
-        _, test_correct, test_total = self.__test()
-        self._test_score = test_correct / test_total
-        print("Test score", self._test_score)
         
 
     def __str__(self):
@@ -299,6 +296,9 @@ class SentimentModelHandler:
         train_accuracies = [scores[1] for scores in self._train_scores]
         val_accuracies = [scores[1] for scores in self._val_scores]
         self._results.create_directory()
+        _, test_correct, test_total = self.__test()
+        self._test_score = test_correct / test_total
+        print("Test score", self._test_score)
         plot_accuracy_per_epoch(file_save_name=file_name,
                                 hparams=self.hparams,              # ← lives in the handler
                             training_accuracy=train_accuracies,
@@ -371,6 +371,7 @@ class ResidualBlockNew(nn.Module):
         out += identity
         out = self.relu(out)
         return out
+
 
 class ResNetModule(nn.Module):
     def __init__(self, in_channels, out_channels, num_blocks, stride=1):
@@ -592,7 +593,8 @@ class ResNetWithAttention2d(nn.Module):
         x = self.fc_out(x)
 
         return x
-#
+
+
 # class ResNetWithAttentionDropOut2d(nn.Module):
 #     def __init__(self, num_classes=8):
 #         super(ResNetWithAttentionDropOut2d, self).__init__()

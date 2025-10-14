@@ -8,7 +8,7 @@ import tqdm
 from ConstPaths import TessPaths
 from PreprocessParams import LABEL_STRINGS, MAX_SPECTOGRAM_DURATION_IN_SECONDS
 from Preprocess import audio_to_mel_spectrogram
-from audio_dataset import AllRawData, EmotionSpecDataset, RavdessRawData, TESSRawData
+from audio_dataset import AllRawData, CREMARawData, EmotionSpecDataset, RavdessRawData, TESSRawData
 from models import ResNetWithAttention
 from pprint import pprint
 import torch.nn as nn
@@ -56,7 +56,7 @@ def preproccess_like_in_dataloader(file_path):
     
     return mel_spectrogram
 
-def get_raw_sample_attributes(model, raw_data_sample):
+def get_raw_sample_attributes(model, raw_data_sample, idx2label_array, float_precision=3):
     """
     Get the probabilities from the model for a single sample from audio raw data sample
     
@@ -75,7 +75,7 @@ def get_raw_sample_attributes(model, raw_data_sample):
     path, true_label = raw_data_sample
     
     attr["path"] = path
-    attr["true_label"] = true_label
+    attr["true label"] = true_label
     
     # preper data to the model
     tensor_mel_spec = preproccess_like_in_dataloader(path)
@@ -83,29 +83,20 @@ def get_raw_sample_attributes(model, raw_data_sample):
     probabilities = get_sample_probabilities_of_model(model, tensor_mel_spec)
     
     # get the de/encoding from classes(nums 0-7 for model) to labels(strings)
-    labels = [
-                LABEL_STRINGS.ANGRY,
-                LABEL_STRINGS.DISGUSTED,
-                LABEL_STRINGS.FEARFUL,
-                LABEL_STRINGS.HAPPY,
-                LABEL_STRINGS.NEUTRAL,
-                LABEL_STRINGS.SURPRISED,
-                LABEL_STRINGS.SAD
-             ]
     label_encoder = LabelEncoder()
-    label_encoder.fit(labels) # order Doesn't matter!
-    
+    label_encoder.fit(idx2label_array) # order Doesn't matter!
+
     # insert all the probablities as such: "class label" : <probability_for_that_class>
     # Add probabilities for each class to attributes
     for i, prob in enumerate(probabilities):
         class_label = label_encoder.classes_[i]
-        attr[f'prob {class_label}'] = float(prob)  # Convert numpy float to Python float for better serialization
+        attr[f'prob {class_label}'] = round(float(prob), float_precision)  # Convert numpy float to Python float for better serialization
 
     # Add predicted class and its probability
     predicted_class_idx = probabilities.argmax()
     predicted_class_label = label_encoder.classes_[predicted_class_idx]
-    attr["predicted_label"] = predicted_class_label
-    attr["predicted_probability"] = float(probabilities[predicted_class_idx])
+    attr["predicted label"] = predicted_class_label
+    attr["predicted probability"] = round(float(probabilities[predicted_class_idx]), float_precision)
 
     # Convert the dictionary to a pandas Series
     
@@ -114,7 +105,7 @@ def get_raw_sample_attributes(model, raw_data_sample):
     
     return attr_series
 
-def get_raw_dataset_attributes(model, raw_dataset: set):
+def get_raw_dataset_attributes(model, raw_dataset: set, idx2label_array):
     """
     Get the attributes for each sample in the raw dataset.
     
@@ -127,7 +118,7 @@ def get_raw_dataset_attributes(model, raw_dataset: set):
     """
     attributes_list = []
     for sample in tqdm.tqdm(raw_dataset, desc="Processing samples", unit="sample"):
-        attributes = get_raw_sample_attributes(model, sample)
+        attributes = get_raw_sample_attributes(model, sample, idx2label_array)
         attributes_list.append(attributes)
     
     # Convert the list of Series objects to a DataFrame
@@ -347,19 +338,38 @@ def test2():
 if __name__ == "__main__":
     ######### Probability Vector Dataframe #########
 
+    #? 1. choose dataset
     # raw data loading:
-    tess_raw_data = TESSRawData()
+    crema_raw_data = CREMARawData()
 
-    data = set(list(tess_raw_data.all_data))
-
+    data = set(list(crema_raw_data.all_data))
+    
+    #? 2. choose the trained model
     # Load the model weights
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = torch.load(r"TESS\models\2025-09-25_11-23-34\ResNetWithAttention_Tess_spk_shuffeled.pt", map_location=device)
+    model = torch.load(r"CREMA-D\models\2025-09-29_14-16-05\ResNetWithAttention.pt", map_location=device)
     
-    # Get the attributes for the sample
-    attributes = get_raw_dataset_attributes(model, data)
+    #? 3. define the label2idx_array of the dataset (the order matters) 
+    label2idx_array = [ 
+                        LABEL_STRINGS.ANGRY,
+                        LABEL_STRINGS.DISGUSTED,
+                        LABEL_STRINGS.FEARFUL,
+                        LABEL_STRINGS.HAPPY,
+                        LABEL_STRINGS.NEUTRAL,
+                        LABEL_STRINGS.SAD
+                      ]
     
+    #? 4. Get the attributes for the sample
+    attributes = get_raw_dataset_attributes(model, data, label2idx_array)
+    
+    #? 5. choose result's path (csv)
     # save the df to csv
-    attributes.to_csv(r"TESS\prob_vector_tables\tess_spk_shuffled_prob_vector.csv", index=False)
-    print("Saved to tess_spk_shuffled_prob_vector.csv")
+    try:
+        attributes.to_csv(r"CREMA-D/prob_vector_tables/with test cremaD speaker shuffled.csv", index=False)
+    except Exception as e:
+        print(f"Error saving to CSV: {e}")
+        input("ensure file is closed and press Enter to continue...")
+        attributes.to_csv(r"CREMA-D/prob_vector_tables/with test cremaD speaker shuffled.csv", index=False)
+    
+    print("Saved to with test cremaD speaker shuffled.csv")
 

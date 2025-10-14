@@ -67,7 +67,7 @@ def audio_to_mel_spectrogram(file_path: Path,
                             max_length_in_seconds: float = MAX_SPECTOGRAM_DURATION_IN_SECONDS,
                             resizing = True,
                             top_db: int = TOP_DB,
-                            normalization_fn: Callable[[np.ndarray], np.ndarray] = standardization):
+                            normalization_fn: Callable[[np.ndarray], np.ndarray] = lambda x: x):
     """
     Given audio file path, extracts its waveform and from it creates a mel-spectrogram.
     :param resizing: True if you wish to resize the spectrogram to a fixed length.

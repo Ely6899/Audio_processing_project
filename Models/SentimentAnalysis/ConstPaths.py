@@ -17,16 +17,19 @@ class RavdessPaths(EnumType):
     DOUBLE_SENTENCE_AUDIO_DATA = Path(os.path.join(ALL_AUDIO_DATA, "double_sentence_audio"))
 
 class CremaPaths(EnumType):
-    ALL_AUDIO_DATA = Path(os.path.join(r"CREMA-D\CREMA-D DATASET"))
+    ALL_AUDIO_DATA = Path(os.path.join(r"CREMA-D\DATASETS\splitted data"))
     WAV_DATA = Path(os.path.join(ALL_AUDIO_DATA, 'AudioWAV'))
+    TRAIN_DATA = Path(os.path.join(ALL_AUDIO_DATA, "train"))
+    VAL_DATA = Path(os.path.join(ALL_AUDIO_DATA, "val"))
+    TEST_DATA = Path(os.path.join(ALL_AUDIO_DATA, "test"))
     
 class TessPaths(EnumType):
-    ROOT_DIR = Path(r"TESS")
-    ALL_DATA = Path(os.path.join(ROOT_DIR, "TESS_DATASET"))
-    TRAIN_DATA = Path(os.path.join(ALL_DATA , "train"))
-    TEST_DATA = Path(os.path.join(ALL_DATA , "test"))
-    PROB_VECTOR_SHUFFLED = Path(ROOT_DIR, "prob_vector_tables", "tess_spk_shuffled_prob_vector.csv")
-    PROB_VECTOR_SPLITTED = Path(ROOT_DIR, "prob_vector_tables", "tess_spk_splitted_prob_vector.csv")
+    ALL_DATA = Path(r"TESS\TESS_DATASET")
+    TRAIN_DATA = Path(os.path.join(ALL_DATA, "train"))
+    VAL_DATA = Path(os.path.join(ALL_DATA, "val"))
+    TEST_DATA = Path(os.path.join(ALL_DATA, "test"))
+    PROB_VECTOR_SHUFFLED = Path(ALL_DATA, "prob_vector_tables", "tess_spk_shuffled_prob_vector.csv")
+    PROB_VECTOR_SPLITTED = Path(ALL_DATA, "prob_vector_tables", "tess_spk_splitted_prob_vector.csv")
     
 class conceptPaths(EnumType):
     ALL_CONCEPTS = Path(os.path.join(r"positive concepts\positive concepts dataset"))

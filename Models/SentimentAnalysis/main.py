@@ -1,25 +1,25 @@
-from audio_dataset import AllRawData, RavdessRawDataWithNeutral, EmotionSpecDataset2d
+from audio_dataset import AllRawData, CremaDSplitttedRawData, RavdessRawDataWithNeutral, EmotionSpecDataset2d, TESSRawData, TessSplitttedRawData
 from audio_dataset import RavdessRawData, EmotionSpecDataset
 from models import SentimentModelHandler, ResNetWithAttention, ResNetWithAttention2d
 
 
 def train_1channel():
-    ravdess_raw_data = RavdessRawData(include_calm=True, include_aug=False)
-    ravdess_raw_data.print_all_label_counts()
+    tess_raw_data = TessSplitttedRawData()
+    # cremaD_raw_data.print_all_label_counts()
 
-    all_data_raw = tuple([ravdess_raw_data])
-    all_data = AllRawData(all_data_raw)
+    # all_data_raw = tuple([tess_raw_data])
+    # all_data = AllRawData(all_data_raw)
 
-    train_set, val_set, test_set = all_data.train_val_test_split(0.1, 0.2)
+    # train_set, val_set, test_set = all_data.train_val_test_split(0.1, 0.2)
 
     # create the dataset with the preprocessing logic:
-    train_ds = EmotionSpecDataset(train_set)
-    val_ds = EmotionSpecDataset(val_set)
-    test_ds = EmotionSpecDataset(test_set)
+    train_ds = EmotionSpecDataset(tess_raw_data.train_data)
+    val_ds = EmotionSpecDataset(tess_raw_data.val_data)
+    test_ds = EmotionSpecDataset(tess_raw_data.test_data)
 
 
     # # create the model:
-    model_paper = ResNetWithAttention(num_classes=8)
+    model_paper = ResNetWithAttention(num_classes=7)
     #
     # #
     # # # create the handler:
@@ -29,11 +29,11 @@ def train_1channel():
                                           test_ds,
                                           batch_size=32,
                                           learning_rate=0.001,
-                                          raw_data_class_name="ravdess_raw_data")
+                                          raw_data_class_name="tess_raw_data")
     # #
     # # # train the model:
     try:
-        handler_paper.train_model(epochs = 40, verbose=True, save_model=True)
+        handler_paper.train_model(epochs = 40, verbose=True)
     except KeyboardInterrupt:
         print("Training was interrupted by the user.")
         
@@ -41,6 +41,7 @@ def train_1channel():
     handler_paper.plot_accuracies("SINGLE-SENTENCE-SGD-70-10-20-no-split-ACC")
     handler_paper.plot_losses("SINGLE-SENTENCE-SGD-70-10-20-no-split-LOSS")
     handler_paper.plot_confusion_matrix("SINGLE-SENTENCE-SGD-70-10-20-no-split-Matrix")
+    handler_paper.ask_to_save_model()
 
 def train_2channel():
     ravdess_raw_data = RavdessRawDataWithNeutral()
@@ -79,5 +80,5 @@ def train_2channel():
 
 if __name__ == '__main__':
     #train_1channel()
-    train_2channel()
+    train_1channel()
 

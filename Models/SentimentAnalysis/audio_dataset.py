@@ -94,8 +94,8 @@ class RavdessRawData(AudioRawData):
         return emotion
 
 class CREMARawData(AudioRawData):
-    def __init__(self):
-        super().__init__(CremaPaths.WAV_DATA, {".wav"}, r"^\d{4}_[A-Z]{3}_[A-Z]{3}_[A-Z]{2}$")
+    def __init__(self, data_root: Path = CremaPaths.ALL_AUDIO_DATA):
+        super().__init__(data_root, {".wav"}, r"^\d{4}_[A-Z]{3}_[A-Z]{3}_[A-Z]{2}$")
 
     def emotion_indexer(self, file_path: Path) -> str:
         """
@@ -239,14 +239,22 @@ class SplitttedAudioRawData:
 
     @property
     def all_data(self) -> set[Tuple[Path, Any]]:
-        return self.train_data | self.val_data | self.test_data
+        return (self.train_data | self.val_data | self.test_data)
     
+
+class CremaDSplitttedRawData(SplitttedAudioRawData):
+    def __init__(self):
+        cremaD_train = CREMARawData(CremaPaths.TRAIN_DATA)
+        cremaD_val = CREMARawData(CremaPaths.VAL_DATA)
+        cremaD_test = CREMARawData(CremaPaths.TEST_DATA)
+        super().__init__(cremaD_train, cremaD_val, cremaD_test, {".wav"})
+        
 
 class TessSplitttedRawData(SplitttedAudioRawData):
     def __init__(self):
         tess_train = TESSRawData(TessPaths.TRAIN_DATA)
-        tess_val = TESSRawData(TessPaths.TEST_DATA)
-        tess_test = None # no test set in TESS
+        tess_val = TESSRawData(TessPaths.VAL_DATA)
+        tess_test = TESSRawData(TessPaths.TEST_DATA)
         super().__init__(tess_train, tess_val, tess_test, {".wav"})
     
     
