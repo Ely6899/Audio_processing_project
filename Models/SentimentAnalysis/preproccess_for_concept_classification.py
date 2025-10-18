@@ -3,17 +3,14 @@ Preprocess a spectrogram for input to a vision backbone (e.g., ResNet), so it ha
 Used to fine-tune vision backbones for our multi-label classification (given a mel spectrogram, predict what concepts are present).
 """
 
-from typing import Optional, Sequence, Tuple, Union
-import torch
-import torchvision.transforms as T
-import matplotlib.pyplot as plt
-from Visualizations import plot_mel_spectrogram
-from Preprocess import audio_to_mel_spectrogram
 from pathlib import Path
+from typing import Optional, Sequence, Tuple, Union
 
 import torch
 import torch.nn.functional as F
-import matplotlib.pyplot as plt
+
+from Preprocess import audio_to_mel_spectrogram
+from Visualizations import plot_mel_spectrogram
 
 IMAGENET_MEAN = torch.tensor([0.485, 0.456, 0.406]).view(3,1,1)
 IMAGENET_STD  = torch.tensor([0.229, 0.224, 0.225]).view(3,1,1)

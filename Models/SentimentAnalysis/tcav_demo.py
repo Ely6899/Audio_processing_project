@@ -1,26 +1,20 @@
-from xml.parsers.expat import model
-from IPython.display import display
-
 from pathlib import Path
 # from captum.attr import LayerActivation
 # from functorch.dim import Tensor #! makes a bug because functorch.dim isn't supported in python 3.12 !!
-from pprint import pprint
 from typing import List, Optional
 
 import numpy as np
 import pandas as pd
 import torch
+import tqdm
 from captum.concept import TCAV, Concept
 from torch.utils.data import DataLoader, Dataset
-import tqdm
+from tqdm import tqdm
 
+from ConstPaths import conceptPaths
 from Preprocess import audio_to_mel_spectrogram
 from PreprocessParams import LABEL_STRINGS, TARGET_FRAMES, FREQUENCY_BIN_COUNT
 from concepts_creation import generate_random_pattern_spectrogram
-from tqdm import tqdm
-
-from ConstPaths import TessPaths, conceptPaths
-
 
 CONCEPT_UNIQUE_NAMES = [
                         "long-constant-thick",

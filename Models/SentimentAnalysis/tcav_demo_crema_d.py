@@ -1,23 +1,19 @@
-
-from IPython.display import display
-from captum.concept import TCAV, Concept
-import pandas as pd
-from torch.utils.data import DataLoader, Dataset
-from typing import Optional
-from pathlib import Path
-import sys
 import re
-import random
-import torch
-import numpy as np
-from typing import Dict, List
+import sys
 from pathlib import Path
 from typing import Optional, Tuple, List, Dict
+
+import numpy as np
+import pandas as pd
+import torch
+from captum.concept import TCAV, Concept
+from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
-from Preprocess import audio_to_mel_spectrogram
-from PreprocessParams import TARGET_FRAMES, FREQUENCY_BIN_COUNT, MAX_SPECTOGRAM_DURATION_IN_SECONDS
-from concepts_creation import generate_random_pattern_spectrogram
+
 from ConstPaths import CremaPaths
+from Preprocess import audio_to_mel_spectrogram
+from PreprocessParams import TARGET_FRAMES, FREQUENCY_BIN_COUNT
+from concepts_creation import generate_random_pattern_spectrogram
 
 # os.environ["MKL_ENABLE_INSTRUCTIONS"] = "AVX2"
 here = Path(__file__).resolve()

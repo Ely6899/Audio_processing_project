@@ -1,9 +1,24 @@
+import csv
+from collections import defaultdict
+
+import librosa
+import pandas as pd
+from matplotlib import pyplot as plt
+from pytorch_grad_cam import GradCAM
+from pytorch_grad_cam.utils.image import show_cam_on_image
+from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
+from scipy.signal import correlate2d
+
+from Models.SentimentAnalysis.ConstPaths import RavdessPaths
+from Models.SentimentAnalysis.Preprocess import audio_to_mel_spectrogram
+from Models.SentimentAnalysis.audio_dataset import EmotionSpecDataset
+from Models.SentimentAnalysis.correlation_kernel_playground import kernel_list
 from Models.SentimentAnalysis.gradcam_initilaization import *
 
 PANDAS_FLAG: bool | None = True
 RECORDINGS_TO_PROCESS = []
 if PANDAS_FLAG is True:
-    df = pd.read_csv(Path("attributes/99_attributes.csv"), usecols=['path'], quoting=csv.QUOTE_NONE,
+    df = pd.read_csv(Path("new_attributes/99_attributes_new_split.csv"), usecols=['path'], quoting=csv.QUOTE_NONE,
                      encoding='utf-8', engine='python', dtype=str)
     for wav in df['path']:
         wav_path = Path(wav.replace("\\", "/").strip())
@@ -152,7 +167,7 @@ for emotion, actor_dict in emotion_to_actor_sentence_repetition.items():
             cbar_corr = plt.colorbar(img3, ax=axes[2, :], orientation='horizontal', label='Correlation')
         cbar_spec = fig.colorbar(img2, ax=axes[1, :], orientation='horizontal')
         cbar_spec.set_label("Spectrogram Magnitude (dB)")
-        save_folder = Path("Benchmark_Results") / "Summary_By_Actor" / actor
+        save_folder = Path("Benchmark_Results") / "Summary_By_Actor_New" / actor
         save_folder.mkdir(parents=True, exist_ok=True)
         save_path = save_folder / f"Emotion_{emotion}_overview.png"
         plt.savefig(save_path)

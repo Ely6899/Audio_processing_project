@@ -1,4 +1,3 @@
-# hyperparams.py  (or inside visualizations.py if you prefer)
 HPARAM_ALIASES: dict[str, str] = {
     "learning_rate": "lr",
     "batch_size":    "bs",

@@ -1,28 +1,14 @@
 # --------------------------------------------------------------
 # 0.  Imports – add only TWO lines
 # --------------------------------------------------------------
-import csv
 import re
-from collections import defaultdict
 from pathlib import Path
 from typing import Tuple
 
-import librosa
-import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 import torch
-from scipy.signal import correlate2d
-from pytorch_grad_cam import GradCAM
-from pytorch_grad_cam.utils.image import show_cam_on_image
-from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 
-from ConstPaths import RavdessPaths
-from Visualizations import plot_mel_spectrogram
-from Preprocess import audio_to_mel_spectrogram
 from PreprocessParams import MAX_SPECTOGRAM_DURATION_IN_SECONDS
-from audio_dataset import EmotionSpecDataset
-from correlation_kernel_playground import kernel_list
 
 # Audio params
 FREQUENCY_BIN_COUNT = 64
@@ -90,42 +76,6 @@ def build_correlation_kernel(freq_bins = 20, time_bins = 40) -> np.ndarray:
 
     return kernel
 
-# def extract_important_time_regions(cam_mask: np.ndarray,
-#                                    sample_rate: int,
-#                                    hop_length: int,
-#                                    threshold_quantile: float = 0.9) -> List[Tuple[float, float]]:
-#     time_importance = cam_mask.mean(axis=0)
-#     threshold = np.quantile(time_importance, threshold_quantile)
-#     high_activation = time_importance >= threshold
-#
-#     regions = []
-#     start_idx = None
-#     for idx, is_high in enumerate(high_activation):
-#         if is_high and start_idx is None:
-#             start_idx = idx
-#         elif not is_high and start_idx is not None:
-#             end_idx = idx
-#             start_time = start_idx * hop_length / sample_rate
-#             end_time = end_idx * hop_length / sample_rate
-#             regions.append((start_time, end_time))
-#             start_idx = None
-#     if start_idx is not None:
-#         end_idx = len(high_activation)
-#         start_time = start_idx * hop_length / sample_rate
-#         end_time = end_idx * hop_length / sample_rate
-#         regions.append((start_time, end_time))
-#     return regions
-#
-# def plot_segmented_line(ax, times: np.ndarray, values: np.ndarray,
-#                         highlight_regions: List[Tuple[float, float]],
-#                         base_color='gray', highlight_color='crimson', linewidth=2):
-#     for i in range(len(times)-1):
-#         t0, t1 = times[i], times[i+1]
-#         v0, v1 = values[i], values[i+1]
-#         mid = 0.5*(t0+t1)
-#         color = highlight_color if any(start <= mid <= end for start, end in highlight_regions) else base_color
-#         ax.plot([t0, t1], [v0, v1], color=color, linewidth=linewidth)
-
 # Left for hand_picking only!
 
 RECORDINGS_TO_PROCESS_HANDPICKED = []
@@ -134,7 +84,7 @@ RECORDINGS_TO_PROCESS_HANDPICKED = []
 RECORDINGS_TO_PROCESS = []
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = torch.load(Path("ResNetWithAttention.pt"), map_location=device, weights_only=False)
+model = torch.load(Path("ResNetWithAttention_70-10-20.pt"), map_location=device, weights_only=False)
 model.eval()
 
 

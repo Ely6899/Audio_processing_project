@@ -1,9 +1,10 @@
-from pathlib import Path
 import itertools
+from pathlib import Path
 
 import numpy as np
-from Preprocess import audio_to_mel_spectrogram
-from Visualizations import plot_mel_spectrogram, save_mel_spectrogram
+
+from Visualizations import save_mel_spectrogram
+
 
 def get_file_from_subfolders(root_folder: str | Path, n_files: int = 2):
     """
