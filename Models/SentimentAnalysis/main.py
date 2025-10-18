@@ -1,46 +1,84 @@
-from pathlib import Path
+from audio_dataset import AllRawData, CremaDSplitttedRawData, RavdessRawDataWithNeutral, EmotionSpecDataset2d, TESSRawData, TessSplitttedRawData
+from audio_dataset import RavdessRawData, EmotionSpecDataset
+from models import SentimentModelHandler, ResNetWithAttention, ResNetWithAttention2d
 
-#from Models.SentimentAnalysis.ConstPaths import TRAIN_DATA_CSV, DEV_DATA_CSV, MeldPaths
-from Models.SentimentAnalysis.Preprocess import audio_to_mel_spectogram
-from Models.SentimentAnalysis.PreprocessParams import SAMPLE_RATE
-from Models.SentimentAnalysis.Visualizations import plot_mel_spectrogram
-from Models.SentimentAnalysis.audio_dataset import EmotionDataset, RavdessRawData
-from Models.SentimentAnalysis.models import EmotionClassifier2, SentimentModelHandler, EmotionClassifier1
-from visualizations import Visualizations
+
+def train_1channel():
+    tess_raw_data = TessSplitttedRawData()
+    # cremaD_raw_data.print_all_label_counts()
+
+    # all_data_raw = tuple([tess_raw_data])
+    # all_data = AllRawData(all_data_raw)
+
+    # train_set, val_set, test_set = all_data.train_val_test_split(0.1, 0.2)
+
+    # create the dataset with the preprocessing logic:
+    train_ds = EmotionSpecDataset(tess_raw_data.train_data)
+    val_ds = EmotionSpecDataset(tess_raw_data.val_data)
+    test_ds = EmotionSpecDataset(tess_raw_data.test_data)
+
+
+    # # create the model:
+    model_paper = ResNetWithAttention(num_classes=7)
+    #
+    # #
+    # # # create the handler:
+    handler_paper = SentimentModelHandler(model_paper,
+                                          train_ds,
+                                          val_ds,
+                                          test_ds,
+                                          batch_size=32,
+                                          learning_rate=0.001,
+                                          raw_data_class_name="tess_raw_data")
+    # #
+    # # # train the model:
+    try:
+        handler_paper.train_model(epochs = 40, verbose=True)
+    except KeyboardInterrupt:
+        print("Training was interrupted by the user.")
+        
+    # # save the results in a plot:
+    handler_paper.plot_accuracies("SINGLE-SENTENCE-SGD-70-10-20-no-split-ACC")
+    handler_paper.plot_losses("SINGLE-SENTENCE-SGD-70-10-20-no-split-LOSS")
+    handler_paper.plot_confusion_matrix("SINGLE-SENTENCE-SGD-70-10-20-no-split-Matrix")
+    handler_paper.ask_to_save_model()
+
+def train_2channel():
+    ravdess_raw_data = RavdessRawDataWithNeutral()
+    all_data = AllRawData(tuple([ravdess_raw_data]))
+
+    train, val, test = all_data.train_val_test_split(0.1, 0.2)
+
+    # # create the dataset with the preprocessing logic:
+    train_ds = EmotionSpecDataset2d(train)
+    val_ds = EmotionSpecDataset2d(val)
+    test_ds = EmotionSpecDataset2d(test)
+
+    # create the model:
+    model_paper_2d = ResNetWithAttention2d()
+
+    # create the handler:
+    handler_2d = SentimentModelHandler(model_paper_2d,
+                                          train_ds,
+                                          val_ds,
+                                          test_ds,
+                                          batch_size=32,
+                                          learning_rate=0.001,
+                                          raw_data_class_name="ravdess_raw_data_2d")
+
+    # train the model:
+    try:
+        handler_2d.train_model(epochs=40, verbose=True)
+    except KeyboardInterrupt:
+        print("Training was interrupted by the user.")
+
+    # # save the results in a plot:
+    handler_2d.plot_accuracies(f"DEPTH-MODEL-SGD-70-10-20-no-split-ACC")
+    handler_2d.plot_losses(f"DEPTH-MODEL-SGD-70-10-20-no-split-LOSS")
+    handler_2d.plot_confusion_matrix(f"DEPTH-MODEL-SGD-70-10-20--no-split-Confusion-Matrix")
+
 
 if __name__ == '__main__':
-    ravdess_raw_data = RavdessRawData()
+    #train_1channel()
+    train_1channel()
 
-    print(ravdess_raw_data.train_data)
-    print(ravdess_raw_data.val_data)
-    print(ravdess_raw_data.test_data)
-    #plot_mel_spectrogram(spectogram, SAMPLE_RATE)
-
-    # Load datasets
-    # train_dataset = EmotionDataset(csv_file=TRAIN_DATA_CSV)
-    # val_dataset = EmotionDataset(csv_file=DEV_DATA_CSV)
-    #
-    # model_handler_base = SentimentModelHandler(EmotionClassifier1(), train_dataset=train_dataset, val_dataset=val_dataset)
-    # model_handler_big = SentimentModelHandler(EmotionClassifier2(), train_dataset=train_dataset, val_dataset=val_dataset)
-    #
-    # model_handler_big.train_model(verbose=True)
-    # model_handler_big.plot_losses(file_name="big_losses")
-    # model_handler_big.plot_accuracies(file_name="big_accuracies")
-    #
-    # model_handler_base.train_model(verbose=True)
-    # model_handler_base.plot_losses(file_name="base_losses")
-    # model_handler_base.plot_accuracies(file_name="base_accuracies")
-    #model_handler.train_model(10)
-
-    # Data loaders
-    # train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-    # val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
-    #
-    # # Model, loss, optimizer
-    # model = EmotionClassifier1()
-    # criterion = nn.CrossEntropyLoss()
-    # optimizer = optim.Adam(model.parameters(), lr=0.001)
-    #
-    # # Train the model
-    # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    # train_model(model, train_loader, val_loader, criterion, optimizer, device, epochs=10)

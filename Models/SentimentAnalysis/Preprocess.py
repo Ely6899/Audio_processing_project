@@ -1,11 +1,12 @@
-from pathlib import Path
-
-import torch.nn.functional
-from PreprocessParams import *
-
-import torchaudio
-from torchaudio.transforms import MelSpectrogram, Resample
 import logging
+from pathlib import Path
+from typing import Callable
+
+import librosa
+import numpy as np
+import torch.nn.functional
+
+from PreprocessParams import *
 
 # Create a logger object
 logger = logging.getLogger(__name__)
@@ -19,62 +20,101 @@ console_handler = logging.StreamHandler()
 # Set the log format
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 console_handler.setFormatter(formatter)
-logger.addHandler(console_handler)
+# logger.addHandler(console_handler)
+
+def min_max_normalization(spectrogram: np.ndarray) -> np.ndarray:
+    """
+    Scales the spectrogram values between 0 and 1.
+    """
+    return (spectrogram - spectrogram.min()) / (spectrogram.max() - spectrogram.min())
+
+def standardization(spectrogram: np.ndarray) -> np.ndarray:
+    """
+    Standardizes the spectrogram to have zero mean and unit variance.
+    """
+    return (spectrogram - spectrogram.mean()) / spectrogram.std()
+
+def scale_between_minus_one_and_one(spectrogram: np.ndarray) -> np.ndarray:
+    """
+    Scales the spectrogram values between -1 and 1.
+    """
+    return 2 * (spectrogram - spectrogram.min()) / (spectrogram.max() - spectrogram.min()) - 1
 
 
 def audio_to_waveform(file_path: Path, target_sample_rate: int = SAMPLE_RATE):
-    waveform, loaded_sample_rate = torchaudio.load(uri=file_path)
+    """
+    Given audio file path and target sample rate, extracts waveform data.
+    :param file_path: Audio file path.
+    :param target_sample_rate: Desired sample rate.
+    :return: Waveform data and the target sample rate.
+    """
+    waveform, loaded_sample_rate = librosa.load(file_path, mono=True, sr=target_sample_rate)
     logger.debug(f"Loaded audio file with shape: {waveform.shape}")
 
-    if waveform.shape[0] > 1:  # Check if there are multiple channels
-        waveform = waveform.mean(dim=0, keepdim=True)
+    return waveform, loaded_sample_rate
 
-    if loaded_sample_rate != target_sample_rate:
-        resampler = Resample(orig_freq=loaded_sample_rate, new_freq=target_sample_rate)
-        waveform = resampler(waveform)
-        logger.debug(f"Waveform shape after Resampling: {waveform.shape}")
-
-    return waveform, target_sample_rate
+def trim_silence(waveform: np.ndarray, top_db: int = 20) -> np.ndarray:
+    trimmed_waveform, _ = librosa.effects.trim(waveform, top_db=top_db)
+    return trimmed_waveform
 
 
-def audio_to_mel_spectogram(file_path: Path,
+def audio_to_mel_spectrogram(file_path: Path,
                             sample_rate: int = SAMPLE_RATE,
                             n_fft = N_FFT,
                             window_length = WINDOW_LENGTH,
                             hop_length = HOP_LENGTH,
                             n_mels: int = FREQUENCY_BIN_COUNT,
-                            max_length_in_seconds: float = MAX_SPECTOGRAM_DURATION_IN_SECONDS):
-
-
+                            max_length_in_seconds: float = MAX_SPECTOGRAM_DURATION_IN_SECONDS,
+                            resizing = True,
+                            top_db: int = TOP_DB,
+                            normalization_fn: Callable[[np.ndarray], np.ndarray] = lambda x: x):
+    """
+    Given audio file path, extracts its waveform and from it creates a mel-spectrogram.
+    :param resizing: True if you wish to resize the spectrogram to a fixed length.
+    :param file_path: Audio file path.
+    :param sample_rate: Desired sample rate.
+    :param n_fft: Number of fft values. Defaults to the N_FFT preprocess macro.
+    :param window_length: Spectrogram window length. Defaults to WINDOW_LENGTH marco.
+    :param hop_length: Hop length in frames for spectrogram.
+    :param n_mels: Number of frequency bins for the spectrogram. Defaults to FREQUENCY_BIN_COUNT macro.
+    :param max_length_in_seconds: Limit on the length of spectrogram in seconds. Defaults to MAX_SPECTROGRAM_DURATION_IN_SECONDS
+    :param normalization_fn: Function that normalizes the spectrogram. Defaults to standardization.
+    :return: Mel-spectrogram with the desired attributes.
+    """
     waveform, sample_rate = audio_to_waveform(file_path, sample_rate)
 
-    mel_transform = MelSpectrogram(sample_rate=sample_rate,
-                                   n_mels=n_mels,
-                                   n_fft = n_fft,
-                                   win_length=window_length,
-                                   hop_length=hop_length
-                                   ,normalized=True,
-                                   center=False)
-    mel_spectrogram = mel_transform(waveform)
-    logger.debug(f"Spectogram shape: {mel_spectrogram.shape}\n"
-                 f"Num of channels: {mel_spectrogram.shape[0]}\n"
-                 f"Num of frequency bins: {mel_spectrogram.shape[1]}\n"
-                 f"Num of time frames: {mel_spectrogram.shape[2]}\n")
+    #waveform = trim_silence(waveform, top_db=top_db)
+    #waveform = librosa.effects.preemphasis(waveform)
 
-    mel_spectrogram_padded = pad_spectrogram_to_max_duration(spectrogram=mel_spectrogram,
-                                                             max_duration_seconds=max_length_in_seconds,
-                                                             sample_rate=sample_rate,
-                                                             win_length=window_length,
-                                                             hop_length=hop_length)
+    mel_spectrogram = librosa.feature.melspectrogram(y=waveform,
+                                                     sr=sample_rate,
+                                                     n_mels=n_mels,
+                                                     n_fft=n_fft,
+                                                     win_length = window_length,
+                                                     hop_length = hop_length,
+                                                     power=2.0,
+                                                     center=False,
+                                                     )
 
-    logger.debug(f"Spectrogram shape at return: {mel_spectrogram_padded.shape}")
+    if resizing:
+        mel_spectrogram = resize_spectrogram_to_max_duration(spectrogram=mel_spectrogram,
+                                                                 max_duration_seconds=max_length_in_seconds,
+                                                                 sample_rate=sample_rate,
+                                                                 win_length=window_length,
+                                                                 hop_length=hop_length)
 
-    return mel_spectrogram_padded
+    logger.debug(f"Spectrogram shape at return: {mel_spectrogram.shape}")
+
+    mel_spectrogram = librosa.power_to_db(mel_spectrogram, ref=np.max)
+
+    mel_spectrogram = normalization_fn(mel_spectrogram)
+
+    return mel_spectrogram
 
 
-def pad_spectrogram_to_max_duration(spectrogram, max_duration_seconds, sample_rate, win_length, hop_length):
+def resize_spectrogram_to_max_duration(spectrogram, max_duration_seconds, sample_rate, win_length, hop_length):
     """
-    Pads a spectrogram to match the maximum duration in seconds.
+    Pads or truncates a spectrogram to match the maximum duration in seconds.
 
     Args:
         spectrogram (torch.Tensor): Input spectrogram (shape: [channels, n_mels, n_frames]).
@@ -84,51 +124,19 @@ def pad_spectrogram_to_max_duration(spectrogram, max_duration_seconds, sample_ra
         hop_length (int): Hop size used in the STFT.
 
     Returns:
-        torch.Tensor: Padded spectrogram with consistent frame count.
+        torch.Tensor: Padded spectrogram with the frame count to achieve the asked duration.
     """
 
-    # Calculate the max number of samples for the target duration
+    # compute the target number of frames
     max_samples = int(max_duration_seconds * sample_rate)
-
-    # Calculate the target number of frames for the spectrogram
     target_frames = (max_samples - win_length) // hop_length + 1
 
-    # Get current frame count in the spectrogram
-    current_frames = spectrogram.shape[-1]
-
-    logger.debug(f"Given the input, target amount of frames is {target_frames}\n"
-                 f"and current amount of frames is {current_frames}")
-
-    if current_frames > target_frames:
-        spectrogram = spectrogram[:, :, :target_frames]
-        logger.debug(f"Truncated spectrogram to {target_frames} frames")
-    else:
-        padding_needed = target_frames - current_frames
-        spectrogram = torch.nn.functional.pad(spectrogram, (0, padding_needed), mode='constant', value=0)
-        logger.debug(f"Padded spectrogram to {target_frames} frames")
+    if spectrogram.shape[1] > target_frames: # Truncate
+        logger.debug("Applied truncation")
+        spectrogram = spectrogram[:, :target_frames]
+    else: # Pad spectrogram.shape[1] <= target_frames
+        logger.debug("Applied padding")
+        padding = target_frames - spectrogram.shape[1]
+        spectrogram = np.pad(spectrogram, ((0, 0), (0, padding)), mode='constant')
 
     return spectrogram
-
-
-# def save_datasets_from_csv(csv_path, output_dir, split_name):
-#     """
-#     Preprocess audio recordings into mel spectrogram datasets from a given CSV file.
-#     """
-#     # Load CSV
-#     data = pd.read_csv(csv_path)
-#     audio_paths = data['path'].tolist()
-#     labels = data['label'].tolist()
-#
-#     # Prepare directory
-#     split_dir = os.path.join(output_dir, split_name)
-#     os.makedirs(split_dir, exist_ok=True)
-#
-#     # Save spectrograms
-#     for i, (path, label) in enumerate(zip(audio_paths, labels)):
-#         try:
-#             mel_spec = preprocess_audio_to_mel(path)
-#             np.save(os.path.join(split_dir.__str__(), f"{i}_spec.npy"), mel_spec)
-#             with open(os.path.join(split_dir.__str__(), f"{i}_label.txt"), 'w') as f:
-#                 f.write(str(label))
-#         except Exception as e:
-#             print(f"Error processing {path}: {e}")
